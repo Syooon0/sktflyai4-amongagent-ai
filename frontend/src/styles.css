@@ -239,13 +239,12 @@ input:focus-visible {
   display: grid;
   place-items: center;
   padding-top: 2rem;
-  border-radius: 1.5rem;
-  background: rgb(36 31 27 / 55%);
-  color: #fff;
+  color: #ff6f61;
   font-size: clamp(4rem, 16vw, 7rem);
   font-weight: 950;
   line-height: 1;
   -webkit-text-stroke: 2px var(--color-ink);
+  text-shadow: 4px 4px 0 var(--color-action);
   animation: pulse 900ms ease-in-out infinite;
   pointer-events: none;
 }

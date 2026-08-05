@@ -38,10 +38,12 @@ class FakeAgentGateway:
         self,
         rounds: list[tuple[str, dict[str, str]]],
         history: list[Verdict],
+        nicknames: dict[str, str],
     ) -> FakeJudgeDecision:
         self.judge_calls.append(
             {
                 "rounds": [(question, dict(answers)) for question, answers in rounds],
+                "nicknames": dict(nicknames),
                 "history": [verdict.model_copy(deep=True) for verdict in history],
             }
         )

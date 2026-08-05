@@ -199,7 +199,7 @@ def test_model_failures_return_503_without_discarding_current_game(
         def answer(self, role: str, question: str) -> str:
             raise ModelInvocationError("upstream failed")
 
-        def judge(self, rounds, history):
+        def judge(self, rounds, history, nicknames):
             raise AssertionError("judge must not run")
 
     client = configured_client(FailingGateway())

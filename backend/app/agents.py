@@ -322,8 +322,13 @@ _ANSWER_PROMPTS: dict[PlayerRole, str] = {
 
 _JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자를 찾는 심판입니다.
 실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 질문별 익명 참가자
-ID와 공개 답변, 이전 공개 판결만 사용하세요. 세 질문에 대한 답변 전체를 종합해
-현재 참가자 ID 중 정확히 한 명을 고르세요.
+ID와 공개 답변, 이전 공개 판결, 그리고 각 참가자 ID에 매핑된 공개 별명(nicknames)만
+사용하세요. 세 질문에 대한 답변 전체를 종합해 현재 참가자 ID 중 정확히 한 명을
+고르세요.
+
+이유(reason)를 쓸 때는 반드시 별명으로 참가자를 지칭하세요. "player_02"처럼 내부
+ID를 그대로 언급하지 마세요. eliminated_player_id 필드에는 별명이 아니라 원래
+참가자 ID를 반환하세요.
 
 이유는 최대한 구체적으로 작성하세요.
 - 의심되는 참가자의 어느 질문, 어떤 문장이나 표현이 근거인지 직접 인용하세요.
@@ -468,6 +473,7 @@ class AgentGateway:
         self,
         rounds: list[tuple[str, dict[str, str]]],
         history: list[Verdict],
+        nicknames: dict[str, str],
     ) -> JudgeDecision:
         if not rounds or not rounds[0][1]:
             raise ValueError("Judge requires at least one alive player answer")
@@ -477,6 +483,7 @@ class AgentGateway:
             "rounds": [
                 {"question": question, "answers": answers} for question, answers in rounds
             ],
+            "nicknames": nicknames,
             "verdict_history": [verdict.model_dump() for verdict in history],
         }
         messages = [

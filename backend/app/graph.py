@@ -136,7 +136,10 @@ def run_round(game: Game, human_answer: str, gateway: AgentGateway) -> Game:
         random.shuffle(items)
         rounds.append((question, dict(items)))
 
-    decision = gateway.judge(rounds, list(next_game.verdict_history))
+    nicknames = {
+        player.id: player.nickname for player in next_game.players if player.is_alive
+    }
+    decision = gateway.judge(rounds, list(next_game.verdict_history), nicknames)
     return _apply_verdict(next_game, decision)
 
 

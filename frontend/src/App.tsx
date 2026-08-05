@@ -128,7 +128,13 @@ export default function App() {
 
     if (presentation.stage === "advancing") {
       if (presentation.secondsLeft <= 0) {
-        setGame(presentation.result);
+        setGame({
+          ...presentation.result,
+          players: presentation.result.players.map((player) => ({
+            ...player,
+            answer: null,
+          })),
+        });
         setPresentation(null);
         setOperation(null);
         return;
