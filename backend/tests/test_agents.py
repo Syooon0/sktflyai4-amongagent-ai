@@ -96,10 +96,10 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
     ]
     prompts = [messages[0].content for messages in model.calls]
     assert len(set(prompts)) == 3
-    assert "전략적" in prompts[0]
-    assert "발랄" in prompts[1]
-    assert "무심한" in prompts[2]
-    assert all("한국어 한 문장" in prompt and "120자 이하" in prompt for prompt in prompts)
+    assert "효율" in prompts[0]
+    assert "가능성" in prompts[1]
+    assert "원인과 결과" in prompts[2]
+    assert all("한국어 한 문장" in prompt and "120자" in prompt for prompt in prompts)
     assert [messages[1].content for messages in model.calls] == ["같은 질문"] * 3
     assert model.binds == [
         {"temperature": 0.6},
