@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -17,6 +17,7 @@ class FakeJudgeDecision:
     eliminated_player_id: str
     reason: str = "가장 인공적인 답변입니다."
     confidence: int = 82
+    player_scores: dict[str, int] = field(default_factory=dict)
 
 
 class FakeAgentGateway:

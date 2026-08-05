@@ -169,6 +169,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
                 "eliminated_player_id": "player_03",
                 "reason": "표현이 지나치게 정돈되어 있습니다.",
                 "confidence": 74,
+                "player_scores": {"player_01": 22, "player_03": 74},
             }
         ],
     )
@@ -185,6 +186,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
             eliminated_player_id="player_02",
             reason="이전 공개 판결입니다.",
             confidence=61,
+            player_scores={},
         )
     ]
 
@@ -194,6 +196,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
         eliminated_player_id="player_03",
         reason="표현이 지나치게 정돈되어 있습니다.",
         confidence=74,
+        player_scores={"player_01": 22, "player_03": 74},
     )
     payload = json.loads(model.judge_model.calls[0][1].content)
     assert payload == {
@@ -214,11 +217,13 @@ def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
+                player_scores={"player_04": 50},
             ),
             JudgeDecision(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
+                player_scores={"player_04": 50},
             ),
         ],
     )
@@ -268,6 +273,7 @@ def test_gateway_retries_only_the_invalid_judge_once(
                 "eliminated_player_id": "player_01",
                 "reason": "선택 이유입니다.",
                 "confidence": 73,
+                "player_scores": {"player_01": 73},
             },
         ],
     )

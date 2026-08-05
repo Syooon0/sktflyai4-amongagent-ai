@@ -331,12 +331,19 @@ _JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자
 
 실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 질문별 익명 참가자
 ID와 공개 답변, 이전 공개 판결, 그리고 각 참가자 ID에 매핑된 공개 별명(nicknames)만
-사용하세요. 세 질문에 대한 답변 전체를 종합해 가장 인간 같은 참가자 ID 한 명을
-고르세요.
+사용하세요.
+
+판단 순서:
+1. 세 질문에 대한 답변 전체를 종합해, 살아있는 참가자 전원 각각에게 "이 사람이
+   인간일 가능성" 점수를 0~100으로 매기세요(player_scores). 모든 살아있는
+   참가자 ID가 빠짐없이 포함되어야 합니다.
+2. eliminated_player_id에는 그중 점수가 가장 높은 참가자 ID를 반환하세요.
+   점수와 최종 선택이 서로 어긋나면 안 됩니다.
+3. confidence에는 그 최고 점수를 그대로 반환하세요.
 
 이유(reason)를 쓸 때는 반드시 별명으로 참가자를 지칭하세요. "player_02"처럼 내부
-ID를 그대로 언급하지 마세요. eliminated_player_id 필드에는 별명이 아니라 원래
-참가자 ID를 반환하세요.
+ID를 그대로 언급하지 마세요. eliminated_player_id와 player_scores의 키에는
+별명이 아니라 원래 참가자 ID를 사용하세요.
 
 이유는 최대한 구체적으로 작성하세요.
 - 고른 참가자의 어느 질문, 어떤 문장이나 표현이 "인간답다"는 근거인지 직접
@@ -346,7 +353,7 @@ ID를 그대로 언급하지 마세요. eliminated_player_id 필드에는 별명
   마세요. 반드시 고른 사람이 인간인 이유를 정면으로 설명하세요.
 - 두세 문장 분량으로 작성하되, 근거 없는 추측은 넣지 마세요.
 
-한국어 이유와 0~100의 확신도를 반환하세요."""
+한국어 이유, player_scores, 확신도를 반환하세요."""
 
 _QUESTION_GENERATOR_PROMPT = """
 당신은 네 명의 익명 참가자가 한 문장으로 답하는 대화 게임의
@@ -407,6 +414,7 @@ class JudgeDecision(BaseModel):
     eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
     reason: str = Field(min_length=1, max_length=500)
     confidence: int = Field(ge=0, le=100)
+    player_scores: dict[str, int]
 
 
 class AgentGatewayError(Exception):
@@ -509,6 +517,15 @@ class AgentGateway:
                 if decision.eliminated_player_id not in alive_ids:
                     raise ModelOutputError(
                         "Judge selected a player outside the supplied alive IDs"
+                    )
+                if set(decision.player_scores) != alive_ids:
+                    raise ModelOutputError(
+                        "Judge player_scores must cover exactly the alive IDs"
+                    )
+                top_scorer = max(decision.player_scores, key=decision.player_scores.get)
+                if decision.eliminated_player_id != top_scorer:
+                    raise ModelOutputError(
+                        "Judge eliminated a player who did not have the top score"
                     )
                 return decision
             except (ValidationError, OutputParserException) as error:

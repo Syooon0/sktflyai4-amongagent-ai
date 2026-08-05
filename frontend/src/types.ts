@@ -25,6 +25,7 @@ export interface Verdict {
   eliminated_player_id: PlayerId;
   reason: string;
   confidence: number;
+  player_scores: Record<PlayerId, number>;
 }
 
 export interface PublicPlayer {

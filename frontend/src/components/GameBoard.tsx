@@ -94,6 +94,7 @@ export default function GameBoard({
             }
             isEliminating={player.id === eliminatingPlayerId}
             revealRole={revealRoles}
+            humanScore={game.verdict?.player_scores[player.id] ?? null}
           />
         ))}
       </section>

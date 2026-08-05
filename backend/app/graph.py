@@ -157,6 +157,7 @@ def _apply_verdict(game: Game, decision: JudgeDecision) -> Game:
         eliminated_player_id=cast(PlayerId, decision.eliminated_player_id),
         reason=decision.reason,
         confidence=decision.confidence,
+        player_scores=cast(dict[PlayerId, int], decision.player_scores),
     )
     next_game.verdict = verdict
     next_game.verdict_history.append(verdict)
