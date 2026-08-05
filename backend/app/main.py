@@ -112,7 +112,7 @@ def create_app(
     async def create_game(
         game_service: Annotated[GameService, Depends(require_service)],
     ) -> CreateGameResponse:
-        game, player_token = game_service.create_game()
+        game, player_token = await game_service.create_game()
         return CreateGameResponse(game=game, player_token=player_token)
 
     @application.get("/api/games/{game_id}", response_model=PublicGame)
@@ -140,7 +140,7 @@ def create_app(
         game_service: Annotated[GameService, Depends(require_service)],
         x_player_token: PlayerToken = None,
     ) -> PublicGame:
-        return game_service.next_round(game_id, x_player_token)
+        return await game_service.next_round(game_id, x_player_token)
 
     return application
 

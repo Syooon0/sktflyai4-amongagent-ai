@@ -126,10 +126,17 @@ def test_submit_and_next_routes_drive_the_round_lifecycle(
     headers = {"X-Player-Token": token}
     game_url = f"/api/games/{game['game_id']}"
 
+    for text in ("첫 번째 사람 답변입니다.", "두 번째 사람 답변입니다."):
+        mid_round = client.post(
+            f"{game_url}/answers", headers=headers, json={"answer": text}
+        )
+        assert mid_round.status_code == 200
+        assert mid_round.json()["phase"] == "awaiting_answer"
+
     verdict = client.post(
         f"{game_url}/answers",
         headers=headers,
-        json={"answer": "  첫 번째 사람 답변입니다.  "},
+        json={"answer": "  세 번째 사람 답변입니다.  "},
     )
 
     assert verdict.status_code == 200
@@ -164,13 +171,13 @@ def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
 
     assert all("role" not in player for player in game["players"])
 
-    response = client.post(
-        f"{game_url}/answers",
-        headers=headers,
-        json={"answer": "사람 참가자의 답변입니다."},
-    )
+    response = None
+    for text in ("사람 참가자의 답변 1", "사람 참가자의 답변 2", "사람 참가자의 답변 3"):
+        response = client.post(
+            f"{game_url}/answers", headers=headers, json={"answer": text}
+        )
+        assert response.status_code == 200
 
-    assert response.status_code == 200
     finished = response.json()
     assert finished["phase"] == "finished"
     assert [player["role"] for player in finished["players"]] == [
@@ -185,10 +192,13 @@ def test_model_failures_return_503_without_discarding_current_game(
     fake_gateway_factory: Callable[[Sequence[str]], object],
 ) -> None:
     class FailingGateway:
+        def generate_questions(self) -> list[str]:
+            return ["질문 1", "질문 2", "질문 3"]
+
         def answer(self, role: str, question: str) -> str:
             raise ModelInvocationError("upstream failed")
 
-        def judge(self, question: str, answers: dict[str, str], history: list[object]):
+        def judge(self, rounds, history):
             raise AssertionError("judge must not run")
 
     client = configured_client(FailingGateway())

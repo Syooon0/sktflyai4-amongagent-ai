@@ -191,6 +191,13 @@ export default function App() {
         trimmedAnswer,
       );
       setAnswer("");
+      if (updatedGame.phase === "awaiting_answer") {
+        window.setTimeout(() => {
+          setGame(updatedGame);
+          setOperation(null);
+        }, 2000);
+        return;
+      }
       setPresentation({
         result: updatedGame,
         revealOrder: revealOrder(game, updatedGame),
