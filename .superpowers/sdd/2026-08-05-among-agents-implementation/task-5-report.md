@@ -137,6 +137,46 @@ review identified repeated palette literals and shared speech-bubble structure;
 these were addressed with named CSS design tokens and combined base selectors.
 `git diff --check` passed after the review fixes.
 
+## Review fix round 2/5
+
+The browser payload runner no longer uses or accepts fixed debug port `9333`.
+Chrome now receives `--remote-debugging-port=0` and an isolated directory from
+`mkdtemp`. The runner reads `DevToolsActivePort` only from that exact profile,
+then verifies that the reported loopback port and browser WebSocket path exactly
+match `/json/version`. It never enumerates an existing debug endpoint.
+
+The runner creates a new target with `Target.createTarget`, attaches to that
+specific target ID, and performs the real payload request only in that dedicated
+session. Browser work has a 39-second deadline, preserving a bounded cleanup
+budget: close the WebSocket, send `SIGTERM`, wait at most two seconds, escalate
+to `SIGKILL` and wait at most two more seconds, then remove only the private
+`mkdtemp` profile. The compact runner is 223 lines.
+
+Fresh static verification:
+
+```text
+node --check frontend/scripts/verify-public-game-payload.mjs
+exit 0
+
+git diff --check
+exit 0
+```
+
+One externally bounded live rerun was attempted exactly once as directed:
+
+```text
+timeout 20s npm run verify:public-payload
+exit 124
+```
+
+The run produced only the npm command preamble and the real FastAPI access log
+contained no `POST /api/games`, so it timed out before payload capture. Both
+25-second bounded development servers then exited with code `124` and FastAPI
+completed normal shutdown. No retry was made. Functional payload evidence
+remains the successful real Chrome/FastAPI capture recorded in review round 1;
+round 2 supplies the new port-ownership, dedicated-target, overall-deadline, and
+bounded-cleanup implementation for re-review.
+
 ## Remaining concern
 
 No real OpenAI key was available, so a live model-backed answer/judge round was
