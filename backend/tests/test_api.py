@@ -162,7 +162,8 @@ def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
 ) -> None:
     monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
     monkeypatch.setattr(
-        "app.service.random.sample", lambda population, k: ["INTJ", "ENFP", "ISTP"]
+        "app.service.random.sample",
+        lambda population, k: ["INTJ", "ENFP", "ISTP"] if k == 3 else list(population)[:k],
     )
     client = configured_client(fake_gateway_factory(["player_01"]))
     game, token = create_game(client)
@@ -198,7 +199,7 @@ def test_model_failures_return_503_without_discarding_current_game(
         def answer(self, role: str, question: str) -> str:
             raise ModelInvocationError("upstream failed")
 
-        def judge(self, rounds, history):
+        def judge(self, rounds, history, nicknames):
             raise AssertionError("judge must not run")
 
     client = configured_client(FailingGateway())

@@ -17,6 +17,7 @@ from app.domain import (
     PublicGame,
 )
 from app.graph import run_round
+from app.nicknames import generate_unique_nicknames
 
 
 class GameServiceError(Exception):
@@ -87,6 +88,7 @@ class GameService:
         player_token = secrets.token_urlsafe(32)
         roles: list[PlayerRole] = ["human", *random.sample(MBTI_TYPES, 3)]
         random.shuffle(roles)
+        nicknames = generate_unique_nicknames(len(PLAYER_IDS))
         questions = await asyncio.to_thread(self._gateway.generate_questions)
         game = Game(
             game_id=str(uuid4()),
@@ -95,9 +97,12 @@ class GameService:
                 Player(
                     id=player_id,
                     role=role,
+                    nickname=nickname,
                     token=player_token if role == "human" else None,
                 )
-                for player_id, role in zip(PLAYER_IDS, roles, strict=True)
+                for player_id, role, nickname in zip(
+                    PLAYER_IDS, roles, nicknames, strict=True
+                )
             ],
         )
         self._repository.add(game)

@@ -1,4 +1,4 @@
-import type { PlayerId, PlayerRole, PublicPlayer } from "../types";
+import type { PlayerRole, PublicPlayer } from "../types";
 
 const ROLE_LABELS: Record<PlayerRole, string> = {
   human: "HUMAN",
@@ -27,10 +27,6 @@ interface PlayerCardProps {
   revealRole: boolean;
 }
 
-function playerNumber(id: PlayerId): string {
-  return id.slice(-2);
-}
-
 export default function PlayerCard({
   player,
   isThinking,
@@ -48,7 +44,7 @@ export default function PlayerCard({
         <span className="player-card__character" aria-hidden="true">
           {player.character_emoji}
         </span>
-        <h3>PLAYER {playerNumber(player.id)}</h3>
+        <h3>{player.nickname}</h3>
         {player.is_you && <span className="player-card__you">YOU</span>}
       </header>
 

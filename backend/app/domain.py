@@ -57,6 +57,7 @@ class Player(BaseModel):
 
     id: PlayerId
     role: PlayerRole
+    nickname: str
     token: str | None = None
     answer: str | None = None
     answers: list[str] = Field(default_factory=list)
@@ -71,6 +72,7 @@ class Verdict(BaseModel):
 
 class PublicPlayer(BaseModel):
     id: PlayerId
+    nickname: str
     character_emoji: str
     color: PlayerColor
     is_you: bool
@@ -114,6 +116,7 @@ class Game(BaseModel):
             public_players: list[PublicPlayer | FinishedPublicPlayer] = [
                 FinishedPublicPlayer(
                     id=player.id,
+                    nickname=player.nickname,
                     character_emoji=PLAYER_PRESENTATION[player.id][0],
                     color=PLAYER_PRESENTATION[player.id][1],
                     is_you=player.token == player_token,
@@ -127,6 +130,7 @@ class Game(BaseModel):
             public_players = [
                 PublicPlayer(
                     id=player.id,
+                    nickname=player.nickname,
                     character_emoji=PLAYER_PRESENTATION[player.id][0],
                     color=PLAYER_PRESENTATION[player.id][1],
                     is_you=player.token == player_token,

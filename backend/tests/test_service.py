@@ -154,8 +154,8 @@ async def test_gateway_failure_restores_state_and_allows_retry(
         def generate_questions(self) -> list[str]:
             return self.fallback.generate_questions()
 
-        def judge(self, rounds, history):
-            return self.fallback.judge(rounds, history)
+        def judge(self, rounds, history, nicknames):
+            return self.fallback.judge(rounds, history, nicknames)
 
     service = service_with_human_in_first_slot(monkeypatch, FailsOnceGateway())
     game, token = await service.create_game()
@@ -212,8 +212,8 @@ async def test_concurrent_submission_is_rejected_while_first_is_processing(
         def generate_questions(self) -> list[str]:
             return fallback.generate_questions()
 
-        def judge(self, rounds, history):
-            return fallback.judge(rounds, history)
+        def judge(self, rounds, history, nicknames):
+            return fallback.judge(rounds, history, nicknames)
 
     service = service_with_human_in_first_slot(monkeypatch, BlockingGateway())
     game, token = await service.create_game()

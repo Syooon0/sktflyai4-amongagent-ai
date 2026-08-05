@@ -176,6 +176,10 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
         "player_01": "창밖을 봐요.",
         "player_03": "빗소리를 들어요.",
     }
+    nicknames = {
+        "player_01": "수상한 스컹크",
+        "player_03": "이상한 토끼",
+    }
     history = [
         Verdict(
             eliminated_player_id="player_02",
@@ -184,7 +188,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
         )
     ]
 
-    decision = gateway.judge([("오늘의 질문", answers)], history)
+    decision = gateway.judge([("오늘의 질문", answers)], history, nicknames)
 
     assert decision == JudgeDecision(
         eliminated_player_id="player_03",
@@ -194,6 +198,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
     payload = json.loads(model.judge_model.calls[0][1].content)
     assert payload == {
         "rounds": [{"question": "오늘의 질문", "answers": answers}],
+        "nicknames": nicknames,
         "verdict_history": [history[0].model_dump(mode="json")],
     }
     assert not {"role", "prompt", "persona"} & payload.keys()
@@ -219,7 +224,7 @@ def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
     )
 
     with pytest.raises(ModelOutputError, match="outside the supplied alive IDs"):
-        gateway.judge([("질문", {"player_01": "답변"})], [])
+        gateway.judge([("질문", {"player_01": "답변"})], [], {"player_01": "수상한 스컹크"})
 
 
 def test_gateway_validates_structured_judge_fields(
@@ -242,7 +247,7 @@ def test_gateway_validates_structured_judge_fields(
     )
 
     with pytest.raises(ModelOutputError) as error:
-        gateway.judge([("질문", {"player_01": "답변"})], [])
+        gateway.judge([("질문", {"player_01": "답변"})], [], {"player_01": "수상한 스컹크"})
 
     assert isinstance(error.value.__cause__, ValidationError)
     assert len(model.judge_model.calls) == 2
@@ -267,7 +272,7 @@ def test_gateway_retries_only_the_invalid_judge_once(
         ],
     )
 
-    decision = gateway.judge([("질문", {"player_01": "답변"})], [])
+    decision = gateway.judge([("질문", {"player_01": "답변"})], [], {"player_01": "수상한 스컹크"})
 
     assert decision.confidence == 73
     assert len(model.judge_model.calls) == 2

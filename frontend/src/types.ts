@@ -29,6 +29,7 @@ export interface Verdict {
 
 export interface PublicPlayer {
   id: PlayerId;
+  nickname: string;
   character_emoji: string;
   color: PlayerColor;
   is_you: boolean;
@@ -41,6 +42,7 @@ export interface PublicGame {
   game_id: string;
   round_number: number;
   question: string;
+  question_number: number;
   phase: GamePhase;
   players: PublicPlayer[];
   verdict: Verdict | null;

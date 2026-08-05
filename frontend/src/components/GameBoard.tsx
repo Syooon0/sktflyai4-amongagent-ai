@@ -60,6 +60,7 @@ export default function GameBoard({
       <header className="game-status">
         <h1 className="game-title">Among Agents</h1>
         <span>ROUND {game.round_number} / 3</span>
+        <span>질문 {game.question_number} / 3</span>
         <span>생존 {aliveCount}명</span>
         <span>{PHASE_LABELS[game.phase]}</span>
       </header>
@@ -75,6 +76,11 @@ export default function GameBoard({
         <h2 id="player-arena-heading" className="game-board__title">
           플레이어 아레나
         </h2>
+        {secondsUntilNextQuestion !== null && (
+          <div className="next-question-countdown" role="status">
+            {secondsUntilNextQuestion}
+          </div>
+        )}
         {sortedPlayers.map((player) => (
           <PlayerCard
             key={player.id}
@@ -91,12 +97,6 @@ export default function GameBoard({
           />
         ))}
       </section>
-
-      {secondsUntilNextQuestion !== null && (
-        <p className="next-question-countdown" role="status">
-          다음 질문까지 {secondsUntilNextQuestion}초
-        </p>
-      )}
 
       {game.phase === "awaiting_answer" && (
         <form className="answer-form" onSubmit={(event) => handleSubmit(event, onSubmit)}>
