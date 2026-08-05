@@ -15,6 +15,7 @@ interface GameBoardProps {
   isAdvancing: boolean;
   presentationStage: RoundPresentationStage | null;
   eliminatingPlayerId: PlayerId | null;
+  secondsUntilNextQuestion: number | null;
   error: string | null;
   onAnswerChange: (answer: string) => void;
   onSubmit: () => void;
@@ -41,6 +42,7 @@ export default function GameBoard({
   isAdvancing,
   presentationStage,
   eliminatingPlayerId,
+  secondsUntilNextQuestion,
   error,
   onAnswerChange,
   onSubmit,
@@ -89,6 +91,12 @@ export default function GameBoard({
           />
         ))}
       </section>
+
+      {secondsUntilNextQuestion !== null && (
+        <p className="next-question-countdown" role="status">
+          다음 질문까지 {secondsUntilNextQuestion}초
+        </p>
+      )}
 
       {game.phase === "awaiting_answer" && (
         <form className="answer-form" onSubmit={(event) => handleSubmit(event, onSubmit)}>
