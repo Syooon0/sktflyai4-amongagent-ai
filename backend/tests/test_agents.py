@@ -6,7 +6,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.agents import AgentGateway, JudgeDecision, ModelOutputError, QuestionSet
+from app.agents import (
+    AgentGateway,
+    JudgeDecision,
+    ModelOutputError,
+    QuestionSet,
+    _JudgeModelOutput,
+)
 from app.domain import Verdict
 
 
@@ -39,7 +45,7 @@ class StubChatModel(StubRunnable):
 
     def with_structured_output(self, schema: type[Any]) -> StubRunnable:
         self.structured_schemas.append(schema)
-        return self.judge_model if schema is JudgeDecision else self.question_model
+        return self.judge_model if schema is _JudgeModelOutput else self.question_model
 
 
 def gateway_with_stub(
@@ -106,7 +112,7 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
         {"temperature": 0.95},
         {"temperature": 0.95},
     ]
-    assert model.structured_schemas == [JudgeDecision, QuestionSet]
+    assert model.structured_schemas == [_JudgeModelOutput, QuestionSet]
 
 
 @pytest.mark.parametrize(
@@ -169,7 +175,10 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
                 "eliminated_player_id": "player_03",
                 "reason": "표현이 지나치게 정돈되어 있습니다.",
                 "confidence": 74,
-                "player_scores": {"player_01": 22, "player_03": 74},
+                "player_scores": {
+                    "player_01": [20, 22, 24],
+                    "player_03": [72, 74, 76],
+                },
             }
         ],
     )
@@ -213,17 +222,17 @@ def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
     gateway, _, _ = gateway_with_stub(
         monkeypatch,
         judge_responses=[
-            JudgeDecision(
+            _JudgeModelOutput(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
-                player_scores={"player_04": 50},
+                player_scores={"player_04": [50, 50, 50]},
             ),
-            JudgeDecision(
+            _JudgeModelOutput(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
-                player_scores={"player_04": 50},
+                player_scores={"player_04": [50, 50, 50]},
             ),
         ],
     )
@@ -273,7 +282,7 @@ def test_gateway_retries_only_the_invalid_judge_once(
                 "eliminated_player_id": "player_01",
                 "reason": "선택 이유입니다.",
                 "confidence": 73,
-                "player_scores": {"player_01": 73},
+                "player_scores": {"player_01": [70, 73, 76]},
             },
         ],
     )

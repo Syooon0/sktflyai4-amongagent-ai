@@ -334,12 +334,14 @@ ID와 공개 답변, 이전 공개 판결, 그리고 각 참가자 ID에 매핑�
 사용하세요.
 
 판단 순서:
-1. 세 질문에 대한 답변 전체를 종합해, 살아있는 참가자 전원 각각에게 "이 사람이
-   인간일 가능성" 점수를 0~100으로 매기세요(player_scores). 모든 살아있는
-   참가자 ID가 빠짐없이 포함되어야 합니다.
-2. eliminated_player_id에는 그중 점수가 가장 높은 참가자 ID를 반환하세요.
-   점수와 최종 선택이 서로 어긋나면 안 됩니다.
-3. confidence에는 그 최고 점수를 그대로 반환하세요.
+1. 살아있는 참가자 전원에 대해, 질문 하나하나마다 그 답변이 "인간일 가능성"
+   점수를 0~100으로 따로 매기세요. player_scores는 참가자 ID를 키로 하고,
+   [1번 질문 점수, 2번 질문 점수, 3번 질문 점수] 순서의 리스트를 값으로
+   하는 객체입니다. 질문 개수만큼 점수가 있어야 하며, 모든 살아있는 참가자
+   ID가 빠짐없이 포함되어야 합니다.
+2. 참가자별로 세 점수를 종합(예: 평균)해서, 가장 인간일 가능성이 높다고
+   종합된 참가자 ID를 eliminated_player_id로 반환하세요.
+3. confidence에는 그 종합 판단에 대한 전체 확신도(0~100)를 반환하세요.
 
 이유(reason)를 쓸 때는 반드시 별명으로 참가자를 지칭하세요. "player_02"처럼 내부
 ID를 그대로 언급하지 마세요. eliminated_player_id와 player_scores의 키에는
@@ -417,6 +419,15 @@ class JudgeDecision(BaseModel):
     player_scores: dict[str, int]
 
 
+class _JudgeModelOutput(BaseModel):
+    """Raw structured output requested from the model: one score per question."""
+
+    eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
+    reason: str = Field(min_length=1, max_length=500)
+    confidence: int = Field(ge=0, le=100)
+    player_scores: dict[str, list[int]]
+
+
 class AgentGatewayError(Exception):
     """Known model invocation or output failures safe for service translation."""
 
@@ -445,7 +456,7 @@ class AgentGateway:
             timeout=timeout_seconds,
             max_retries=1,
         )
-        self._judge_model = self._model.with_structured_output(JudgeDecision)
+        self._judge_model = self._model.with_structured_output(_JudgeModelOutput)
         self._question_model = self._model.with_structured_output(QuestionSet)
 
     def generate_questions(self) -> list[str]:
@@ -511,23 +522,27 @@ class AgentGateway:
         ]
         for attempt in range(_OUTPUT_ATTEMPTS):
             try:
-                decision = _invoke(self._judge_model, messages)
-                if not isinstance(decision, JudgeDecision):
-                    decision = JudgeDecision.model_validate(decision)
-                if decision.eliminated_player_id not in alive_ids:
+                raw = _invoke(self._judge_model, messages)
+                if not isinstance(raw, _JudgeModelOutput):
+                    raw = _JudgeModelOutput.model_validate(raw)
+                if raw.eliminated_player_id not in alive_ids:
                     raise ModelOutputError(
                         "Judge selected a player outside the supplied alive IDs"
                     )
-                if set(decision.player_scores) != alive_ids:
-                    raise ModelOutputError(
-                        "Judge player_scores must cover exactly the alive IDs"
+                averaged_scores = {
+                    player_id: (
+                        round(sum(scores) / len(scores))
+                        if (scores := raw.player_scores.get(player_id))
+                        else 0
                     )
-                top_scorer = max(decision.player_scores, key=decision.player_scores.get)
-                if decision.eliminated_player_id != top_scorer:
-                    raise ModelOutputError(
-                        "Judge eliminated a player who did not have the top score"
-                    )
-                return decision
+                    for player_id in alive_ids
+                }
+                return JudgeDecision(
+                    eliminated_player_id=raw.eliminated_player_id,
+                    reason=raw.reason,
+                    confidence=raw.confidence,
+                    player_scores=averaged_scores,
+                )
             except (ValidationError, OutputParserException) as error:
                 output_error = ModelOutputError(
                     "Judge model returned invalid structured output"
