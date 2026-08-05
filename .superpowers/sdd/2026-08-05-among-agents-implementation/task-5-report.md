@@ -63,12 +63,71 @@ Both Vite and FastAPI development servers were started locally.
 - Browser-computed typography included the Korean font fallback chain and
   `word-break: keep-all`. The loaded stylesheet exposed both the 761px desktop
   breakpoint and the reduced-motion media rule.
-- The pre-finish mock response intentionally omitted roles, browser rendering
-  contained zero role labels before finish, and the actual backend API suite
-  verified the corresponding serialized network contract. The browser-control
-  surface did not expose response-body capture from developer tools, so that
-  privacy assertion is triangulated from the controlled response, rendered DOM,
-  and real API contract test rather than a browser-network body export.
+- The pre-finish mock response intentionally omitted roles and browser rendering
+  contained zero role labels before finish. The later review fix below adds a
+  direct browser-context capture of the real FastAPI creation response.
+
+## Review fix round 1/5
+
+The browser-network acceptance check was repeated against the real application,
+not the mock service. FastAPI ran with the non-billable dummy process variable
+`OPENAI_API_KEY=sk-dummy-nonbillable`; Vite ran normally on port 5173. No answer
+was submitted, so the dummy key was never sent to an external model.
+
+The in-app browser backend had no connected browser at this point. Following the
+review fallback requirement, `frontend/scripts/verify-public-game-payload.mjs`
+was added as a repeatable, dependency-free browser automation check. It launches
+local headless Google Chrome, connects through the Chrome DevTools Protocol,
+loads the actual Vite origin, performs `fetch("/api/games", { method: "POST" })`
+inside that page, captures the complete JSON body, and asserts the exact public
+player keys. Run it while the documented backend and frontend servers are up:
+
+```text
+cd frontend && npm run verify:public-payload
+request: POST /api/games
+status: 201
+responseEnvelopeKeys: ["game", "player_token"]
+playerTokenType: "string"
+gameKeys: ["game_id", "phase", "players", "question", "result",
+           "round_number", "verdict", "verdict_history"]
+playerKeys (all four players):
+  ["answer", "character_emoji", "color", "id", "is_alive", "is_you"]
+anyPlayerHasRole: false
+phase: "awaiting_answer"
+round_number: 1
+all answers: null
+verdict: null
+result: null
+```
+
+The real FastAPI access log for this capture contained exactly:
+
+```text
+POST /api/games HTTP/1.1 201 Created
+```
+
+There was no `POST /answers` request. This directly confirms that the actual
+pre-finish browser response contains no `role` key before any model-backed work.
+
+The second review finding was addressed by giving all 12 `box-shadow` rules a
+modest nonzero blur (`0.2rem`–`1rem`) with a shared translucent ink shadow token.
+Thick borders and offset direction preserve the comic-party character while the
+shadow edges are now visibly soft. Static inspection found no zero-blur shadow.
+
+Fresh verification after both fixes:
+
+```text
+cd backend && python -m pytest -q
+34 passed in 1.48s
+
+cd frontend && npm test -- --run && npm run build
+1 test file passed; 8 tests passed
+tsc --noEmit: exit 0
+vite build: 19 modules transformed, built in 51ms
+
+git diff --check
+exit 0
+```
 
 ## Self-review
 

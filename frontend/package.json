@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest"
+    "test": "vitest",
+    "verify:public-payload": "node scripts/verify-public-game-payload.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.5",

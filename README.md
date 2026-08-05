@@ -68,6 +68,18 @@ npm test -- --run
 npm run build
 ```
 
+With both development servers running, capture and assert the real pre-finish
+game-creation payload in local headless Chrome:
+
+```bash
+cd frontend
+npm run verify:public-payload
+```
+
+This check performs only `POST /api/games`; it never submits an answer or calls
+the model. Set `CHROME_PATH` if Google Chrome is installed somewhere other than
+the default macOS application path.
+
 ## API summary
 
 Except for health and game creation, game routes require the opaque token from

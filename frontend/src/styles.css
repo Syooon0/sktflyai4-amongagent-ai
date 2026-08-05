@@ -8,6 +8,7 @@
   --color-mint: #a8e6cf;
   --color-action: #ffcf62;
   --color-judge: #4f55a5;
+  --color-shadow: rgb(36 31 27 / 28%);
 
   color: var(--color-ink);
   background: var(--color-cream);
@@ -51,7 +52,7 @@ button {
   border-radius: 999px;
   color: var(--color-ink);
   background: var(--color-action);
-  box-shadow: 4px 4px 0 var(--color-ink);
+  box-shadow: 4px 4px 0.45rem var(--color-shadow);
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
@@ -63,13 +64,13 @@ button {
 
 button:hover:not(:disabled) {
   translate: 2px 2px;
-  box-shadow: 2px 2px 0 var(--color-ink);
+  box-shadow: 2px 2px 0.3rem var(--color-shadow);
   background: #ffd978;
 }
 
 button:active:not(:disabled) {
   translate: 4px 4px;
-  box-shadow: 0 0 0 var(--color-ink);
+  box-shadow: 0 1px 0.2rem var(--color-shadow);
 }
 
 button:disabled {
@@ -108,7 +109,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 2rem;
   background: rgb(255 253 247 / 90%);
-  box-shadow: 9px 9px 0 var(--color-ink);
+  box-shadow: 9px 9px 1rem var(--color-shadow);
   text-align: center;
   animation: rise-in 420ms ease-out both;
 }
@@ -180,7 +181,7 @@ input:focus-visible {
   border: 2px solid var(--color-ink);
   border-radius: 999px;
   background: #fff;
-  box-shadow: 2px 2px 0 var(--color-ink);
+  box-shadow: 2px 2px 0.3rem var(--color-shadow);
   font-size: 0.84rem;
   font-weight: 900;
   white-space: nowrap;
@@ -204,7 +205,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
   background: var(--color-action);
-  box-shadow: 6px 6px 0 var(--color-ink);
+  box-shadow: 6px 6px 0.75rem var(--color-shadow);
   animation: rise-in 360ms ease-out both;
 }
 
@@ -250,7 +251,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
   background: var(--player-color);
-  box-shadow: 6px 6px 0 var(--color-ink);
+  box-shadow: 6px 6px 0.75rem var(--color-shadow);
   animation: rise-in 360ms ease-out both;
 }
 
@@ -314,7 +315,7 @@ input:focus-visible {
   border: 2px solid var(--color-ink);
   border-radius: 999px;
   background: #fff;
-  box-shadow: 2px 2px 0 var(--color-ink);
+  box-shadow: 2px 2px 0.3rem var(--color-shadow);
   font-size: 0.72rem;
   font-weight: 950;
 }
@@ -417,7 +418,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 1.25rem;
   background: #fff;
-  box-shadow: 5px 5px 0 var(--color-ink);
+  box-shadow: 5px 5px 0.65rem var(--color-shadow);
 }
 
 .answer-form label {
@@ -451,7 +452,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
   background: var(--color-judge);
-  box-shadow: 6px 6px 0 var(--color-ink);
+  box-shadow: 6px 6px 0.75rem var(--color-shadow);
 }
 
 .judge-panel__character {
@@ -468,7 +469,7 @@ input:focus-visible {
 .judge-panel__bubble {
   min-height: 5rem;
   padding: 1rem 1.2rem;
-  box-shadow: 4px 4px 0 var(--color-ink);
+  box-shadow: 4px 4px 0.5rem var(--color-shadow);
   animation: bubble-in 300ms ease-out both;
 }
 
@@ -523,7 +524,7 @@ input:focus-visible {
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
   background: var(--color-action);
-  box-shadow: 6px 6px 0 var(--color-ink);
+  box-shadow: 6px 6px 0.75rem var(--color-shadow);
   text-align: center;
   animation: rise-in 420ms ease-out both;
 }
