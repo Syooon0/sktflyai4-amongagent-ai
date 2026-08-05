@@ -192,8 +192,10 @@ export default function App() {
       );
       setAnswer("");
       if (updatedGame.phase === "awaiting_answer") {
-        setGame(updatedGame);
-        setOperation(null);
+        window.setTimeout(() => {
+          setGame(updatedGame);
+          setOperation(null);
+        }, 2000);
         return;
       }
       setPresentation({
