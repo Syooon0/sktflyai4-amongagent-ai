@@ -344,16 +344,16 @@ input:focus-visible {
   right: 0.7rem;
   z-index: 1;
   display: grid;
-  width: 2.4rem;
-  height: 2.4rem;
   place-items: center;
+  padding: 0.4rem 0.65rem;
   border: 2px solid var(--color-ink);
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--color-judge);
   box-shadow: 2px 2px 0.3rem var(--color-shadow);
   color: #fff;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 950;
+  white-space: nowrap;
 }
 
 .player-card__bubble,

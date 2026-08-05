@@ -44,7 +44,7 @@ export default function PlayerCard({
     >
       {humanScore !== null && (
         <span className="player-card__score" title="인간다움 점수">
-          {humanScore}
+          의심도: {humanScore}
         </span>
       )}
 
