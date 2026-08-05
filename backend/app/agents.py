@@ -1,6 +1,7 @@
 """OpenAI-backed answer personas and anonymous structured judging."""
 
 import json
+import random
 import re
 from typing import Any
 
@@ -388,19 +389,28 @@ _QUESTION_GENERATOR_PROMPT = """
 - 선택지를 부정적 또는 긍정적으로 편향해 묘사하는 질문
 
 [질문 유형]
-아래 유형 중 하나를 임의로 선택합니다.
-- 사소한 취향 대결
-- 가벼운 가상 상황
-- 일상 속 우선순위
-- 친구 관계에서의 반응
-- 여행이나 여가 선택
-- 음식과 생활 습관
-- 작은 도덕적 딜레마
-- 불편하지만 재미있는 양자택일
+이번 요청에 지정된 세 가지 유형을 순서대로 하나씩 사용해 질문을 만드세요.
+같은 유형이라도 매번 다른 소재, 다른 상황을 써서 이전에 나온 질문과 겹치지
+않게 하세요.
 
 [출력]
 설명이나 분류 없이 질문 한 문장만 출력합니다.
 """.strip()
+
+_QUESTION_CATEGORIES: tuple[str, ...] = (
+    "사소한 취향 대결",
+    "가벼운 가상 상황",
+    "일상 속 우선순위",
+    "친구 관계에서의 반응",
+    "여행이나 여가 선택",
+    "음식과 생활 습관",
+    "작은 도덕적 딜레마",
+    "불편하지만 재미있는 양자택일",
+    "예상 밖의 감정 반응",
+    "물건이나 소지품에 대한 애착",
+    "사소한 습관이나 루틴",
+    "의외의 취향이나 비밀스러운 선호",
+)
 
 
 class QuestionSet(BaseModel):
@@ -485,13 +495,20 @@ class AgentGateway:
         self._question_model = self._model.with_structured_output(QuestionSet)
 
     def generate_questions(self) -> list[str]:
+        categories = random.sample(_QUESTION_CATEGORIES, 3)
         messages = [
             SystemMessage(content=_QUESTION_GENERATOR_PROMPT),
-            HumanMessage(content="세 개의 질문을 만들어 주세요."),
+            HumanMessage(
+                content=(
+                    "세 개의 질문을 아래 순서의 유형으로 하나씩 만들어 주세요: "
+                    f"1) {categories[0]} 2) {categories[1]} 3) {categories[2]}"
+                )
+            ),
         ]
+        question_model = self._question_model.bind(temperature=1.0)
         for attempt in range(_OUTPUT_ATTEMPTS):
             try:
-                result = _invoke(self._question_model, messages)
+                result = _invoke(question_model, messages)
                 if not isinstance(result, QuestionSet):
                     result = QuestionSet.model_validate(result)
                 for question in result.questions:
