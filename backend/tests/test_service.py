@@ -186,6 +186,38 @@ async def test_concurrent_submission_is_rejected_while_first_is_processing(
     assert (await first).phase == GamePhase.VERDICT
 
 
+@pytest.mark.asyncio
+async def test_cancelled_submission_restores_the_pre_submit_state(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_gateway_factory: Callable[[Sequence[str]], object],
+) -> None:
+    started = Event()
+    release = Event()
+
+    def blocking_round(game, answer, gateway):
+        started.set()
+        assert release.wait(timeout=2)
+        return game
+
+    monkeypatch.setattr("app.service.random.shuffle", lambda roles: None)
+    service = GameService(
+        fake_gateway_factory(["player_02"]),  # type: ignore[arg-type]
+        round_runner=blocking_round,
+    )
+    game, token = service.create_game()
+    submission = asyncio.create_task(
+        service.submit_answer(game.game_id, token, "취소할 답변입니다.")
+    )
+    assert await asyncio.to_thread(started.wait, 2)
+
+    submission.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await submission
+
+    assert service.get_game(game.game_id, token) == game
+
+
 def test_next_round_requires_token_existing_game_and_verdict_phase(
     monkeypatch: pytest.MonkeyPatch,
     fake_gateway_factory: Callable[[Sequence[str]], object],

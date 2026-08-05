@@ -2,7 +2,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
@@ -88,6 +88,10 @@ def test_game_routes_map_auth_missing_validation_and_phase_errors(
     assert client.get("/api/games/missing", headers={"X-Player-Token": token}).status_code == 404
     assert client.get(game_url).status_code == 403
     assert client.get(game_url, headers={"X-Player-Token": "wrong"}).status_code == 403
+    assert client.get(
+        game_url,
+        headers=[(b"X-Player-Token", "잘못된".encode("utf-8"))],
+    ).status_code == 403
     assert client.post(
         f"{game_url}/answers",
         headers={"X-Player-Token": token},
@@ -133,6 +137,35 @@ def test_submit_and_next_routes_drive_the_round_lifecycle(
         assert next_round.status_code == 200
         assert next_round.json()["round_number"] == 2
         assert next_round.json()["phase"] == "awaiting_answer"
+
+
+def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_gateway_factory: Callable[[Sequence[str]], object],
+) -> None:
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    client = configured_client(fake_gateway_factory(["player_01"]))
+    game, token = create_game(client)
+    headers = {"X-Player-Token": token}
+    game_url = f"/api/games/{game['game_id']}"
+
+    assert all("role" not in player for player in game["players"])
+
+    response = client.post(
+        f"{game_url}/answers",
+        headers=headers,
+        json={"answer": "사람 참가자의 답변입니다."},
+    )
+
+    assert response.status_code == 200
+    finished = response.json()
+    assert finished["phase"] == "finished"
+    assert [player["role"] for player in finished["players"]] == [
+        "human",
+        "ai_empath",
+        "ai_wit",
+        "ai_story",
+    ]
 
 
 def test_model_failures_return_503_without_discarding_current_game(

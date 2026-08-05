@@ -86,3 +86,62 @@ importing `httpx` through `fastapi.testclient`; there are no test failures.
   rather than mock call counts.
 - No unresolved functional concerns. The repository is intentionally
   process-local and non-persistent, as required for the demo architecture.
+
+## Review round 1/5
+
+Addressed all four review findings:
+
+- `asyncio.CancelledError` now restores the pre-submit game snapshot before it
+  is re-raised, so cancellation cannot leave a game in `judging`.
+- Player tokens are compared as UTF-8 bytes. A malformed non-ASCII token now
+  follows the normal invalid-token path and returns HTTP `403`.
+- Added a deterministic API lifecycle test proving roles are absent from the
+  created game and present for all four players after a human elimination ends
+  the game.
+- Replaced the deprecated `httpx` test dependency with Starlette's supported
+  `httpx2` dependency and imported `TestClient` from its canonical Starlette
+  module. `httpx2==2.9.1` was used for verification.
+
+### RED evidence
+
+```text
+python -m pytest tests/test_service.py::test_cancelled_submission_restores_the_pre_submit_state -q
+FAILED test_cancelled_submission_restores_the_pre_submit_state
+assert service.get_game(game.game_id, token) == game
+1 failed in 1.23s
+
+python -m pytest tests/test_api.py::test_game_routes_map_auth_missing_validation_and_phase_errors -q
+FAILED test_game_routes_map_auth_missing_validation_and_phase_errors
+TypeError: comparing strings with non-ASCII characters is not supported
+1 failed, 1 warning in 1.42s
+```
+
+The deterministic finished-role test passed before changes, confirming that the
+existing serializer behavior was correct but previously unprotected at the API
+boundary. The deprecation warning above came from Starlette falling back to the
+legacy `httpx` package because `httpx2` was not installed.
+
+### GREEN and final verification evidence
+
+```text
+python -m pytest tests/test_service.py::test_cancelled_submission_restores_the_pre_submit_state tests/test_api.py::test_game_routes_map_auth_missing_validation_and_phase_errors tests/test_api.py::test_api_hides_roles_before_finish_and_reveals_them_after_finish -q -W error
+...                                                                      [100%]
+3 passed in 1.32s
+
+python -m pytest tests/test_service.py tests/test_api.py -q -W error
+...................                                                      [100%]
+19 passed in 1.36s
+
+python -m pytest -q -W error
+..................................                                       [100%]
+34 passed in 1.36s
+
+python -m compileall -q app
+exit 0
+
+git diff --check
+exit 0
+```
+
+The focused and full suites are now pristine under `-W error`: no warnings and
+no failures.

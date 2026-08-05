@@ -137,6 +137,9 @@ class GameService:
                     normalized_answer,
                     self._gateway,
                 )
+            except asyncio.CancelledError:
+                self._repository.replace(original_game)
+                raise
             except Exception as error:
                 self._repository.replace(original_game)
                 raise ModelGatewayError(str(error)) from error
@@ -162,7 +165,9 @@ class GameService:
     def _authorized_game(self, game_id: str, token: str | None) -> Game:
         game = self._repository.get(game_id)
         human = next(player for player in game.players if player.role == "human")
-        if not token or not secrets.compare_digest(human.token or "", token):
+        if not token or not secrets.compare_digest(
+            (human.token or "").encode("utf-8"), token.encode("utf-8")
+        ):
             raise InvalidTokenError("Invalid player token")
         return game
 
