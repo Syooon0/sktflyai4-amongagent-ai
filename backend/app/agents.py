@@ -87,6 +87,7 @@ class AgentGateway:
         self._model = ChatOpenAI(
             api_key=api_key,
             model=model,
+            temperature=20,
             timeout=timeout_seconds,
             max_retries=1,
         )
