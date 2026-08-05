@@ -33,11 +33,21 @@ function tokenHeaders(playerToken: string): HeadersInit {
 
 export async function getHealth(): Promise<HealthResponse> {
   const response = await fetch("/api/health");
-  const payload = (await response.json()) as HealthResponse;
+  const payload: unknown = await response.json();
   if (!response.ok && response.status !== 503) {
     throw new ApiError("서버 상태를 확인하지 못했습니다.", response.status);
   }
-  return payload;
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("status" in payload) ||
+    !["ok", "unavailable"].includes(String(payload.status)) ||
+    !("api_key_configured" in payload) ||
+    typeof payload.api_key_configured !== "boolean"
+  ) {
+    throw new ApiError("서버 상태 응답이 올바르지 않습니다.", response.status);
+  }
+  return payload as HealthResponse;
 }
 
 export async function createGame(): Promise<CreateGameResponse> {

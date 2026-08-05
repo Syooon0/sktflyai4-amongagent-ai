@@ -48,6 +48,7 @@ export default function GameBoard({
   return (
     <main className="game-screen">
       <header className="game-status">
+        <h1 className="game-title">Among Agents</h1>
         <span>ROUND {game.round_number} / 3</span>
         <span>생존 {aliveCount}명</span>
         <span>{PHASE_LABELS[game.phase]}</span>
@@ -55,12 +56,15 @@ export default function GameBoard({
 
       <section className="question-card" aria-labelledby="round-question">
         <p>이번 질문</p>
-        <h1 id="round-question">{game.question}</h1>
+        <h2 id="round-question">{game.question}</h2>
       </section>
 
       {error && <p role="alert">{error}</p>}
 
-      <section className="game-board" aria-label="참가자 아레나">
+      <section className="game-board" aria-labelledby="player-arena-heading">
+        <h2 id="player-arena-heading" className="game-board__title">
+          플레이어 아레나
+        </h2>
         {sortedPlayers.map((player) => (
           <PlayerCard
             key={player.id}

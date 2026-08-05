@@ -1,15 +1,5 @@
 import type { PlayerId, PlayerRole, PublicPlayer } from "../types";
 
-const PLAYER_PRESENTATION: Record<
-  PlayerId,
-  { character: string; colorClass: string }
-> = {
-  player_01: { character: "🤖", colorClass: "player-card--coral" },
-  player_02: { character: "👾", colorClass: "player-card--blue" },
-  player_03: { character: "🛸", colorClass: "player-card--yellow" },
-  player_04: { character: "🦾", colorClass: "player-card--mint" },
-};
-
 const ROLE_LABELS: Record<PlayerRole, string> = {
   human: "HUMAN",
   ai_empath: "AI · 공감형",
@@ -32,18 +22,16 @@ export default function PlayerCard({
   isThinking,
   revealRole,
 }: PlayerCardProps) {
-  const presentation = PLAYER_PRESENTATION[player.id];
-
   return (
     <article
-      className={`player-card ${presentation.colorClass}${
+      className={`player-card player-card--${player.color}${
         player.is_alive ? "" : " player-card--out"
       }`}
       data-player-id={player.id}
     >
       <header className="player-card__header">
         <span className="player-card__character" aria-hidden="true">
-          {presentation.character}
+          {player.character_emoji}
         </span>
         <h3>PLAYER {playerNumber(player.id)}</h3>
         {player.is_you && <span className="player-card__you">YOU</span>}

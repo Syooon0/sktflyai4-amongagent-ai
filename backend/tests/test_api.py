@@ -69,6 +69,15 @@ def test_create_returns_token_once_and_pre_finish_json_contains_no_private_field
     assert "token" not in serialized
     assert "role" not in serialized
     assert "prompt" not in serialized
+    assert [
+        (player["id"], player["character_emoji"], player["color"])
+        for player in game["players"]
+    ] == [
+        ("player_01", "🤖", "coral"),
+        ("player_02", "👾", "blue"),
+        ("player_03", "🛸", "yellow"),
+        ("player_04", "🦾", "mint"),
+    ]
     response = client.get(
         f"/api/games/{game['game_id']}",
         headers={"X-Player-Token": token},

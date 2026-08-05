@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 PlayerRole = Literal["human", "ai_empath", "ai_wit", "ai_story"]
 PlayerId = Literal["player_01", "player_02", "player_03", "player_04"]
+PlayerColor = Literal["coral", "blue", "yellow", "mint"]
 
 PLAYER_IDS: tuple[PlayerId, ...] = (
     "player_01",
@@ -14,6 +15,13 @@ PLAYER_IDS: tuple[PlayerId, ...] = (
     "player_03",
     "player_04",
 )
+
+PLAYER_PRESENTATION: dict[PlayerId, tuple[str, PlayerColor]] = {
+    "player_01": ("🤖", "coral"),
+    "player_02": ("👾", "blue"),
+    "player_03": ("🛸", "yellow"),
+    "player_04": ("🦾", "mint"),
+}
 
 QUESTIONS: tuple[str, ...] = (
     "비 오는 날 가장 먼저 떠오르는 장면을 한 문장으로 표현해 주세요.",
@@ -52,6 +60,8 @@ class Verdict(BaseModel):
 
 class PublicPlayer(BaseModel):
     id: PlayerId
+    character_emoji: str
+    color: PlayerColor
     is_you: bool
     answer: str | None
     is_alive: bool
@@ -91,6 +101,8 @@ class Game(BaseModel):
             public_players: list[PublicPlayer | FinishedPublicPlayer] = [
                 FinishedPublicPlayer(
                     id=player.id,
+                    character_emoji=PLAYER_PRESENTATION[player.id][0],
+                    color=PLAYER_PRESENTATION[player.id][1],
                     is_you=player.token == player_token,
                     answer=player.answer,
                     is_alive=player.is_alive,
@@ -102,6 +114,8 @@ class Game(BaseModel):
             public_players = [
                 PublicPlayer(
                     id=player.id,
+                    character_emoji=PLAYER_PRESENTATION[player.id][0],
+                    color=PLAYER_PRESENTATION[player.id][1],
                     is_you=player.token == player_token,
                     answer=player.answer,
                     is_alive=player.is_alive,

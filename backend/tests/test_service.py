@@ -49,6 +49,15 @@ def test_create_game_assigns_one_random_human_slot_and_separate_opaque_token(
     assert len(first_game.players) == 4
     assert shuffle_calls == 2
     assert [player.id for player in first_game.players if player.is_you] == ["player_04"]
+    assert [
+        (player.id, player.character_emoji, player.color)
+        for player in first_game.players
+    ] == [
+        ("player_01", "🤖", "coral"),
+        ("player_02", "👾", "blue"),
+        ("player_03", "🛸", "yellow"),
+        ("player_04", "🦾", "mint"),
+    ]
     assert all("role" not in player.model_dump() for player in first_game.players)
 
 

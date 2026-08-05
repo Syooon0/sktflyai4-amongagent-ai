@@ -12,10 +12,10 @@ const initialGame = {
   question: "비 오는 날 가장 먼저 떠오르는 장면을 한 문장으로 표현해 주세요.",
   phase: "awaiting_answer",
   players: [
-    { id: "player_01", is_you: false, answer: null, is_alive: true },
-    { id: "player_02", is_you: true, answer: null, is_alive: true },
-    { id: "player_03", is_you: false, answer: null, is_alive: true },
-    { id: "player_04", is_you: false, answer: null, is_alive: true },
+    { id: "player_01", character_emoji: "🤖", color: "coral", is_you: false, answer: null, is_alive: true },
+    { id: "player_02", character_emoji: "👾", color: "blue", is_you: true, answer: null, is_alive: true },
+    { id: "player_03", character_emoji: "🛸", color: "yellow", is_you: false, answer: null, is_alive: true },
+    { id: "player_04", character_emoji: "🦾", color: "mint", is_you: false, answer: null, is_alive: true },
   ],
   verdict: null,
   verdict_history: [],
@@ -26,10 +26,10 @@ const verdictGame = {
   ...initialGame,
   phase: "verdict",
   players: [
-    { id: "player_01", is_you: false, answer: "빗소리를 들으며 창밖을 봐요.", is_alive: true },
-    { id: "player_02", is_you: true, answer: "우산 위로 빗방울이 춤춰요.", is_alive: true },
-    { id: "player_03", is_you: false, answer: "도로 위 네온빛이 번져요.", is_alive: false },
-    { id: "player_04", is_you: false, answer: "젖은 흙 냄새가 떠올라요.", is_alive: true },
+    { ...initialGame.players[0], answer: "빗소리를 들으며 창밖을 봐요." },
+    { ...initialGame.players[1], answer: "우산 위로 빗방울이 춤춰요." },
+    { ...initialGame.players[2], answer: "도로 위 네온빛이 번져요.", is_alive: false },
+    { ...initialGame.players[3], answer: "젖은 흙 냄새가 떠올라요." },
   ],
   verdict: {
     eliminated_player_id: "player_03",
@@ -115,6 +115,19 @@ describe("Among Agents arena", () => {
     expect(screen.getByRole("button", { name: "게임 시작" })).toBeDisabled();
   });
 
+  it.each([
+    ["rejected", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ["malformed", () => Promise.resolve(new Response("not-json"))],
+  ])("treats a %s health request as unreachable instead of a missing key", async (_, response) => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(response));
+
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).not.toHaveTextContent("OPENAI_API_KEY");
+    expect(screen.queryByText(/\.env/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "게임 시작" })).toBeDisabled();
+  });
+
   it("submits a trimmed answer and advances only after the next-round action", async () => {
     const fetchMock = mockFetchSequence(
       jsonResponse({ status: "ok", api_key_configured: true }),
@@ -129,6 +142,9 @@ describe("Among Agents arena", () => {
 
     const cards = await screen.findAllByRole("article");
     expect(cards).toHaveLength(4);
+    expect(screen.getByRole("heading", { level: 1, name: "Among Agents" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: initialGame.question })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "플레이어 아레나" })).toBeInTheDocument();
     expect(screen.getByText("YOU")).toBeInTheDocument();
     expect(screen.getByText("PLAYER 02").closest("article")).toContainElement(
       screen.getByText("YOU"),
@@ -167,6 +183,28 @@ describe("Among Agents arena", () => {
         headers: { "X-Player-Token": "secret-token" },
       }),
     );
+  });
+
+  it("renders presentation metadata supplied by the server", async () => {
+    const serverPresentedGame = {
+      ...initialGame,
+      players: [
+        { ...initialGame.players[0], character_emoji: "🦾", color: "mint" },
+        ...initialGame.players.slice(1),
+      ],
+    };
+    mockFetchSequence(
+      jsonResponse({ status: "ok", api_key_configured: true }),
+      jsonResponse({ game: serverPresentedGame, player_token: "secret-token" }, 201),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "게임 시작" }));
+
+    const firstCard = (await screen.findByText("PLAYER 01")).closest("article");
+    expect(firstCard).toHaveClass("player-card--mint");
+    expect(within(firstCard!).getByText("🦾")).toBeInTheDocument();
   });
 
   it("keeps the current arena when submission fails", async () => {

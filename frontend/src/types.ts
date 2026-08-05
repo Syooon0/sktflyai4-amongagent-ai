@@ -2,6 +2,8 @@ export type PlayerId = "player_01" | "player_02" | "player_03" | "player_04";
 
 export type PlayerRole = "human" | "ai_empath" | "ai_wit" | "ai_story";
 
+export type PlayerColor = "coral" | "blue" | "yellow" | "mint";
+
 export type GamePhase = "awaiting_answer" | "judging" | "verdict" | "finished";
 
 export type GameResult = "human_won" | "judge_won";
@@ -14,6 +16,8 @@ export interface Verdict {
 
 export interface PublicPlayer {
   id: PlayerId;
+  character_emoji: string;
+  color: PlayerColor;
   is_you: boolean;
   answer: string | null;
   is_alive: boolean;
