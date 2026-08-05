@@ -17,7 +17,10 @@ interface RoundPresentation {
   revealedCount: number;
   stage: RoundPresentationStage;
   reducedMotion: boolean;
+  secondsLeft: number;
 }
+
+const NEXT_QUESTION_COUNTDOWN_SECONDS = 3;
 
 const PRESENTATION_DELAYS = {
   revealing: 500,
@@ -25,6 +28,7 @@ const PRESENTATION_DELAYS = {
   verdict: 650,
   eliminating: 450,
   out: 300,
+  advancing: 1000,
 } satisfies Record<RoundPresentationStage, number>;
 
 function errorMessage(error: unknown): string {
@@ -122,6 +126,26 @@ export default function App() {
   useEffect(() => {
     if (!presentation) return;
 
+    if (presentation.stage === "advancing") {
+      if (presentation.secondsLeft <= 0) {
+        setGame(presentation.result);
+        setPresentation(null);
+        setOperation(null);
+        return;
+      }
+      const timer = window.setTimeout(
+        () => {
+          setPresentation((current) =>
+            current === presentation
+              ? { ...current, secondsLeft: current.secondsLeft - 1 }
+              : current,
+          );
+        },
+        presentation.reducedMotion ? 0 : 1000,
+      );
+      return () => window.clearTimeout(timer);
+    }
+
     const delay = presentation.reducedMotion
       ? 0
       : PRESENTATION_DELAYS[presentation.stage];
@@ -138,10 +162,21 @@ export default function App() {
         return;
       }
 
+      if (presentation.stage === "revealing") {
+        const next: RoundPresentationStage = presentation.result.verdict
+          ? "judging"
+          : "advancing";
+        setPresentation((current) =>
+          current === presentation
+            ? { ...current, stage: next, secondsLeft: NEXT_QUESTION_COUNTDOWN_SECONDS }
+            : current,
+        );
+        return;
+      }
+
       const nextStage: Partial<
         Record<RoundPresentationStage, RoundPresentationStage>
       > = {
-        revealing: "judging",
         judging: "verdict",
         verdict: "eliminating",
         eliminating: "out",
@@ -191,18 +226,12 @@ export default function App() {
         trimmedAnswer,
       );
       setAnswer("");
-      if (updatedGame.phase === "awaiting_answer") {
-        window.setTimeout(() => {
-          setGame(updatedGame);
-          setOperation(null);
-        }, 2000);
-        return;
-      }
       setPresentation({
         result: updatedGame,
         revealOrder: revealOrder(game, updatedGame),
         revealedCount: 0,
         stage: "revealing",
+        secondsLeft: 0,
         reducedMotion:
           typeof window.matchMedia === "function" &&
           window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -250,6 +279,9 @@ export default function App() {
           presentation?.stage === "eliminating"
             ? presentation.result.verdict?.eliminated_player_id ?? null
             : null
+        }
+        secondsUntilNextQuestion={
+          presentation?.stage === "advancing" ? presentation.secondsLeft : null
         }
         error={error}
         onAnswerChange={setAnswer}

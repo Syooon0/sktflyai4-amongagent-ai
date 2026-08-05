@@ -18,7 +18,8 @@ export type RoundPresentationStage =
   | "judging"
   | "verdict"
   | "eliminating"
-  | "out";
+  | "out"
+  | "advancing";
 
 export interface Verdict {
   eliminated_player_id: PlayerId;
