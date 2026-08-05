@@ -6,7 +6,7 @@ import secrets
 from collections.abc import Callable
 from uuid import uuid4
 
-from app.agents import AgentGateway, MAX_ANSWER_LENGTH
+from app.agents import AgentGateway, AgentGatewayError, MAX_ANSWER_LENGTH
 from app.domain import (
     PLAYER_IDS,
     QUESTIONS,
@@ -140,9 +140,12 @@ class GameService:
             except asyncio.CancelledError:
                 self._repository.replace(original_game)
                 raise
-            except Exception as error:
+            except AgentGatewayError as error:
                 self._repository.replace(original_game)
                 raise ModelGatewayError(str(error)) from error
+            except Exception:
+                self._repository.replace(original_game)
+                raise
 
             self._repository.replace(completed_game)
             return completed_game.to_public(token)

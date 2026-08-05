@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from app.agents import ModelInvocationError
 from app.config import Settings
 from app.main import create_app
 
@@ -182,7 +183,7 @@ def test_model_failures_return_503_without_discarding_current_game(
 ) -> None:
     class FailingGateway:
         def answer(self, role: str, question: str) -> str:
-            raise RuntimeError("upstream failed")
+            raise ModelInvocationError("upstream failed")
 
         def judge(self, question: str, answers: dict[str, str], history: list[object]):
             raise AssertionError("judge must not run")

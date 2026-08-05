@@ -8,6 +8,13 @@ export type GamePhase = "awaiting_answer" | "judging" | "verdict" | "finished";
 
 export type GameResult = "human_won" | "judge_won";
 
+export type RoundPresentationStage =
+  | "revealing"
+  | "judging"
+  | "verdict"
+  | "eliminating"
+  | "out";
+
 export interface Verdict {
   eliminated_player_id: PlayerId;
   reason: string;

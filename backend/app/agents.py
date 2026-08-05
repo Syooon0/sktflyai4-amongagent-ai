@@ -4,13 +4,17 @@ import json
 import re
 from typing import Any
 
+from httpx import HTTPError
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from openai import OpenAIError
+from pydantic import BaseModel, Field, ValidationError
 
 from app.domain import PlayerRole, Verdict
 
 MAX_ANSWER_LENGTH = 120
+_OUTPUT_ATTEMPTS = 2
 
 _ANSWER_PROMPTS: dict[PlayerRole, str] = {
     "ai_empath": (
@@ -45,6 +49,18 @@ class JudgeDecision(BaseModel):
     confidence: int = Field(ge=0, le=100)
 
 
+class AgentGatewayError(Exception):
+    """Known model invocation or output failures safe for service translation."""
+
+
+class ModelInvocationError(AgentGatewayError):
+    pass
+
+
+class ModelOutputError(AgentGatewayError, ValueError):
+    pass
+
+
 class AgentGateway:
     """Small synchronous boundary around the OpenAI chat model."""
 
@@ -68,12 +84,17 @@ class AgentGateway:
         if prompt is None:
             raise ValueError(f"Role {role!r} is not an AI answer persona")
 
-        response = self._model.invoke(
-            [SystemMessage(content=prompt), HumanMessage(content=question)]
-        )
-        answer = _message_text(response.content).strip()
-        _validate_korean_sentence(answer)
-        return answer
+        messages = [SystemMessage(content=prompt), HumanMessage(content=question)]
+        for attempt in range(_OUTPUT_ATTEMPTS):
+            response = _invoke(self._model, messages)
+            try:
+                answer = _message_text(response.content).strip()
+                _validate_korean_sentence(answer)
+                return answer
+            except ModelOutputError:
+                if attempt == _OUTPUT_ATTEMPTS - 1:
+                    raise
+        raise AssertionError("answer output retry loop exhausted")
 
     def judge(
         self,
@@ -89,19 +110,39 @@ class AgentGateway:
             "answers": answers,
             "verdict_history": [verdict.model_dump() for verdict in history],
         }
-        decision = self._judge_model.invoke(
-            [
-                SystemMessage(content=_JUDGE_PROMPT),
-                HumanMessage(
-                    content=json.dumps(public_payload, ensure_ascii=False, separators=(",", ":"))
-                ),
-            ]
-        )
-        if not isinstance(decision, JudgeDecision):
-            decision = JudgeDecision.model_validate(decision)
-        if decision.eliminated_player_id not in answers:
-            raise ValueError("Judge selected a player outside the supplied alive IDs")
-        return decision
+        messages = [
+            SystemMessage(content=_JUDGE_PROMPT),
+            HumanMessage(
+                content=json.dumps(public_payload, ensure_ascii=False, separators=(",", ":"))
+            ),
+        ]
+        for attempt in range(_OUTPUT_ATTEMPTS):
+            try:
+                decision = _invoke(self._judge_model, messages)
+                if not isinstance(decision, JudgeDecision):
+                    decision = JudgeDecision.model_validate(decision)
+                if decision.eliminated_player_id not in answers:
+                    raise ModelOutputError(
+                        "Judge selected a player outside the supplied alive IDs"
+                    )
+                return decision
+            except (ValidationError, OutputParserException) as error:
+                output_error = ModelOutputError(
+                    "Judge model returned invalid structured output"
+                )
+                if attempt == _OUTPUT_ATTEMPTS - 1:
+                    raise output_error from error
+            except ModelOutputError:
+                if attempt == _OUTPUT_ATTEMPTS - 1:
+                    raise
+        raise AssertionError("judge output retry loop exhausted")
+
+
+def _invoke(model: Any, messages: list[Any]) -> Any:
+    try:
+        return model.invoke(messages)
+    except (OpenAIError, HTTPError, TimeoutError) as error:
+        raise ModelInvocationError(str(error)) from error
 
 
 def _message_text(content: Any) -> str:
@@ -113,16 +154,16 @@ def _message_text(content: Any) -> str:
             for block in content
             if isinstance(block, dict) and isinstance(block.get("text"), str)
         )
-    raise ValueError("Answer model returned unsupported content")
+    raise ModelOutputError("Answer model returned unsupported content")
 
 
 def _validate_korean_sentence(answer: str) -> None:
     if not answer:
-        raise ValueError("Answer model returned an empty answer")
+        raise ModelOutputError("Answer model returned an empty answer")
     if len(answer) > MAX_ANSWER_LENGTH:
-        raise ValueError(f"Answer model exceeded {MAX_ANSWER_LENGTH} characters")
+        raise ModelOutputError(f"Answer model exceeded {MAX_ANSWER_LENGTH} characters")
     if not re.search(r"[가-힣]", answer):
-        raise ValueError("Answer model must return a Korean sentence")
+        raise ModelOutputError("Answer model must return a Korean sentence")
     sentence = answer.rstrip(_CLOSING_QUOTES_AND_BRACKETS)
     sentence_endings = list(_SENTENCE_END.finditer(sentence))
     if (
@@ -130,4 +171,4 @@ def _validate_korean_sentence(answer: str) -> None:
         or "\n" in answer
         or any(match.end() != len(sentence) for match in sentence_endings)
     ):
-        raise ValueError("Answer model must return exactly one sentence")
+        raise ModelOutputError("Answer model must return exactly one sentence")

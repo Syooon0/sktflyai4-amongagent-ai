@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -82,13 +82,31 @@ function mockFetchSequence(...responses: Response[]) {
   return fetchMock;
 }
 
+function mockReducedMotion(matches: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockReturnValue({
+      matches,
+      media: "(prefers-reduced-motion: reduce)",
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }),
+  );
+}
+
 describe("Among Agents arena", () => {
   beforeEach(() => {
     mockFetchSequence(jsonResponse({ status: "ok", api_key_configured: true }));
+    mockReducedMotion(true);
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -154,7 +172,9 @@ describe("Among Agents arena", () => {
     await user.click(screen.getByRole("button", { name: "답변 제출" }));
 
     expect(await screen.findByText("표현이 지나치게 정돈되어 AI처럼 느껴졌어요.")).toBeInTheDocument();
-    expect(within(screen.getByText("PLAYER 03").closest("article")!).getByText("OUT")).toBeInTheDocument();
+    expect(
+      await within(screen.getByText("PLAYER 03").closest("article")!).findByText("OUT"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "판단 확신도" })).toHaveAttribute("aria-valuenow", "84");
     expect(screen.getByText("ROUND 1 / 3")).toBeInTheDocument();
 
@@ -172,7 +192,7 @@ describe("Among Agents arena", () => {
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    await user.click(screen.getByRole("button", { name: "다음 라운드" }));
+    await user.click(await screen.findByRole("button", { name: "다음 라운드" }));
 
     expect(await screen.findByText(secondRoundGame.question)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -184,6 +204,92 @@ describe("Among Agents arena", () => {
       }),
     );
   });
+
+  it.each([false, true])(
+    "stages answers, judging, verdict, elimination, and OUT before unlocking controls (reduced motion: %s)",
+    async (reducedMotion) => {
+      vi.useFakeTimers();
+      mockReducedMotion(reducedMotion);
+      mockFetchSequence(
+        jsonResponse({ status: "ok", api_key_configured: true }),
+        jsonResponse({ game: initialGame, player_token: "secret-token" }, 201),
+        jsonResponse(verdictGame),
+      );
+      render(<App />);
+      await act(async () => {});
+
+      fireEvent.click(screen.getByRole("button", { name: "게임 시작" }));
+      await act(async () => {});
+      fireEvent.change(screen.getByLabelText("한 줄 답변"), {
+        target: { value: "우산 위로 빗방울이 춤춰요." },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "답변 제출" }));
+      await act(async () => {});
+
+      const answers = verdictGame.players.map((player) => player.answer);
+      expect(
+        answers.every((answer) => screen.queryByText(answer) === null),
+      ).toBe(true);
+      expect(
+        screen.queryByText(verdictGame.verdict.reason),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "다음 라운드" }),
+      ).not.toBeInTheDocument();
+
+      for (
+        let visibleCount = 1;
+        visibleCount <= answers.length;
+        visibleCount += 1
+      ) {
+        await act(async () => {
+          await vi.advanceTimersToNextTimerAsync();
+        });
+        expect(
+          answers.filter((answer) => screen.queryByText(answer) !== null),
+        ).toHaveLength(visibleCount);
+        expect(
+          screen.queryByText(verdictGame.verdict.reason),
+        ).not.toBeInTheDocument();
+      }
+
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+      expect(screen.getByText("답변을 분석하고 있어요…")).toBeInTheDocument();
+      expect(
+        screen.queryByText(verdictGame.verdict.reason),
+      ).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+      expect(screen.getByText(verdictGame.verdict.reason)).toBeInTheDocument();
+      const eliminatedCard = screen.getByText("PLAYER 03").closest("article");
+      expect(eliminatedCard).not.toHaveClass("player-card--eliminating");
+      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+      expect(eliminatedCard).toHaveClass("player-card--eliminating");
+      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+      expect(within(eliminatedCard!).getByText("OUT")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "다음 라운드" }),
+      ).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+      expect(screen.getByRole("button", { name: "다음 라운드" })).toBeEnabled();
+    },
+  );
 
   it("renders presentation metadata supplied by the server", async () => {
     const serverPresentedGame = {

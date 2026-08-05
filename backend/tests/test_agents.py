@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.agents import AgentGateway, JudgeDecision
+from app.agents import AgentGateway, JudgeDecision, ModelOutputError
 from app.domain import Verdict
 
 
@@ -107,10 +107,28 @@ def test_gateway_rejects_invalid_answer_content(
     model_content: str,
     message: str,
 ) -> None:
-    gateway, _, _ = gateway_with_stub(monkeypatch, answer_contents=[model_content])
+    gateway, model, _ = gateway_with_stub(
+        monkeypatch, answer_contents=[model_content, model_content]
+    )
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ModelOutputError, match=message):
         gateway.answer("ai_empath", "질문")
+
+    assert len(model.calls) == 2
+
+
+def test_gateway_retries_only_the_invalid_answer_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gateway, model, _ = gateway_with_stub(
+        monkeypatch,
+        answer_contents=["This answer is English.", "비 오는 창가를 바라봐요."],
+    )
+
+    answer = gateway.answer("ai_empath", "질문")
+
+    assert answer == "비 오는 창가를 바라봐요."
+    assert len(model.calls) == 2
 
 
 def test_gateway_rejects_human_role_without_calling_model(
@@ -175,27 +193,65 @@ def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
-            )
+            ),
+            JudgeDecision(
+                eliminated_player_id="player_04",
+                reason="선택 이유입니다.",
+                confidence=50,
+            ),
         ],
     )
 
-    with pytest.raises(ValueError, match="outside the supplied alive IDs"):
+    with pytest.raises(ModelOutputError, match="outside the supplied alive IDs"):
         gateway.judge("질문", {"player_01": "답변"}, [])
 
 
 def test_gateway_validates_structured_judge_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    gateway, _, _ = gateway_with_stub(
+    gateway, model, _ = gateway_with_stub(
         monkeypatch,
         judge_responses=[
             {
                 "eliminated_player_id": "player_01",
                 "reason": "선택 이유입니다.",
                 "confidence": 101,
-            }
+            },
+            {
+                "eliminated_player_id": "player_01",
+                "reason": "선택 이유입니다.",
+                "confidence": 101,
+            },
         ],
     )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ModelOutputError) as error:
         gateway.judge("질문", {"player_01": "답변"}, [])
+
+    assert isinstance(error.value.__cause__, ValidationError)
+    assert len(model.judge_model.calls) == 2
+
+
+def test_gateway_retries_only_the_invalid_judge_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gateway, model, _ = gateway_with_stub(
+        monkeypatch,
+        judge_responses=[
+            {
+                "eliminated_player_id": "player_01",
+                "reason": "확신도가 잘못되었습니다.",
+                "confidence": 101,
+            },
+            {
+                "eliminated_player_id": "player_01",
+                "reason": "선택 이유입니다.",
+                "confidence": 73,
+            },
+        ],
+    )
+
+    decision = gateway.judge("질문", {"player_01": "답변"}, [])
+
+    assert decision.confidence == 73
+    assert len(model.judge_model.calls) == 2

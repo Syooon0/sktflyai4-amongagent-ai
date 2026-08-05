@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<PlayerRole, string> = {
 interface PlayerCardProps {
   player: PublicPlayer;
   isThinking: boolean;
+  isEliminating: boolean;
   revealRole: boolean;
 }
 
@@ -20,13 +21,14 @@ function playerNumber(id: PlayerId): string {
 export default function PlayerCard({
   player,
   isThinking,
+  isEliminating,
   revealRole,
 }: PlayerCardProps) {
   return (
     <article
       className={`player-card player-card--${player.color}${
         player.is_alive ? "" : " player-card--out"
-      }`}
+      }${isEliminating ? " player-card--eliminating" : ""}`}
       data-player-id={player.id}
     >
       <header className="player-card__header">

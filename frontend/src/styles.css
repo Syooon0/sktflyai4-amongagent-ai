@@ -375,8 +375,13 @@ input:focus-visible {
   font-weight: 950;
 }
 
-.player-card.player-card--out {
+.player-card.player-card--eliminating {
   animation: shake 360ms ease-out both;
+  border-color: #c72c22;
+  box-shadow: 0 0 0 6px rgb(255 111 97 / 35%);
+}
+
+.player-card.player-card--out {
   filter: grayscale(0.82);
 }
 

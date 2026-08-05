@@ -1,6 +1,10 @@
 import type { FormEvent } from "react";
 
-import type { PublicGame } from "../types";
+import type {
+  PlayerId,
+  PublicGame,
+  RoundPresentationStage,
+} from "../types";
 import JudgePanel from "./JudgePanel";
 import PlayerCard from "./PlayerCard";
 
@@ -9,6 +13,8 @@ interface GameBoardProps {
   answer: string;
   isSubmitting: boolean;
   isAdvancing: boolean;
+  presentationStage: RoundPresentationStage | null;
+  eliminatingPlayerId: PlayerId | null;
   error: string | null;
   onAnswerChange: (answer: string) => void;
   onSubmit: () => void;
@@ -33,6 +39,8 @@ export default function GameBoard({
   answer,
   isSubmitting,
   isAdvancing,
+  presentationStage,
+  eliminatingPlayerId,
   error,
   onAnswerChange,
   onSubmit,
@@ -69,7 +77,14 @@ export default function GameBoard({
           <PlayerCard
             key={player.id}
             player={player}
-            isThinking={isSubmitting && player.is_alive && !player.is_you}
+            isThinking={
+              isSubmitting &&
+              (!presentationStage || presentationStage === "revealing") &&
+              player.is_alive &&
+              !player.is_you &&
+              player.answer === null
+            }
+            isEliminating={player.id === eliminatingPlayerId}
             revealRole={revealRoles}
           />
         ))}
@@ -91,7 +106,13 @@ export default function GameBoard({
         </form>
       )}
 
-      <JudgePanel isJudging={isSubmitting || game.phase === "judging"} verdict={game.verdict} />
+      <JudgePanel
+        isJudging={
+          presentationStage === "judging" ||
+          (!presentationStage && game.phase === "judging")
+        }
+        verdict={game.verdict}
+      />
 
       {game.phase === "verdict" && (
         <button type="button" disabled={isAdvancing} onClick={onNextRound}>

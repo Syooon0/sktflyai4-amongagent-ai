@@ -4,6 +4,7 @@ from threading import Event
 
 import pytest
 
+from app.agents import ModelInvocationError
 from app.domain import GamePhase, QUESTIONS
 from app.service import (
     AnswerValidationError,
@@ -141,7 +142,7 @@ async def test_gateway_failure_restores_state_and_allows_retry(
         def answer(self, role: str, question: str) -> str:
             if not self.failed:
                 self.failed = True
-                raise RuntimeError("model unavailable")
+                raise ModelInvocationError("model unavailable")
             return self.fallback.answer(role, question)
 
         def judge(self, question: str, answers: dict[str, str], history: list[object]):
@@ -161,6 +162,27 @@ async def test_gateway_failure_restores_state_and_allows_retry(
         game.game_id, token, "재시도할 답변입니다."
     )
     assert retried.phase == GamePhase.VERDICT
+
+
+@pytest.mark.asyncio
+async def test_unexpected_round_error_rolls_back_and_is_not_translated(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_gateway_factory: Callable[[Sequence[str]], object],
+) -> None:
+    def broken_round(*_: object) -> object:
+        raise AssertionError("round reducer bug")
+
+    monkeypatch.setattr("app.service.random.shuffle", lambda roles: None)
+    service = GameService(
+        fake_gateway_factory(["player_02"]),  # type: ignore[arg-type]
+        round_runner=broken_round,  # type: ignore[arg-type]
+    )
+    game, token = service.create_game()
+
+    with pytest.raises(AssertionError, match="round reducer bug"):
+        await service.submit_answer(game.game_id, token, "사람 답변입니다.")
+
+    assert service.get_game(game.game_id, token) == game
 
 
 @pytest.mark.asyncio
