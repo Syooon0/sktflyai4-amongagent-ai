@@ -21,12 +21,7 @@ class FakeAgentGateway:
 
     def answer(self, role: PlayerRole, question: str) -> str:
         self.answer_calls.append((role, question))
-        answers = {
-            "ai_empath": "창밖 빗소리가 오래된 편지처럼 다정해요.",
-            "ai_wit": "로봇도 쉬는 날엔 충전기를 멀리해야죠.",
-            "ai_story": "친구를 기다리며 식은 커피를 두 잔이나 마셨어요.",
-        }
-        return answers[role]
+        return f"{role} 성향으로 답한 한 줄입니다."
 
     def judge(
         self,
@@ -50,9 +45,9 @@ def game() -> Game:
         game_id="game-graph",
         players=[
             Player(id="player_01", role="human", token="human-token"),
-            Player(id="player_02", role="ai_empath"),
-            Player(id="player_03", role="ai_wit"),
-            Player(id="player_04", role="ai_story"),
+            Player(id="player_02", role="INTJ"),
+            Player(id="player_03", role="ENFP"),
+            Player(id="player_04", role="ISTP"),
         ],
     )
 

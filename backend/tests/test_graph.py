@@ -33,7 +33,7 @@ def test_round_one_calls_each_alive_ai_once_and_anonymizes_judge_payload(
     result = run_round(game, "빗소리를 들으며 따뜻한 차를 마셔요.", gateway)
 
     assert Counter(role for role, _ in gateway.answer_calls) == Counter(
-        {"ai_empath": 1, "ai_wit": 1, "ai_story": 1}
+        {"INTJ": 1, "ENFP": 1, "ISTP": 1}
     )
     assert {question for _, question in gateway.answer_calls} == {QUESTIONS[0]}
     assert len(gateway.judge_calls) == 1
@@ -53,9 +53,9 @@ def test_round_one_calls_each_alive_ai_once_and_anonymizes_judge_payload(
     ]
     assert not set(judge_payload["answers"]) & {
         "human",
-        "ai_empath",
-        "ai_wit",
-        "ai_story",
+        "INTJ",
+        "ENFP",
+        "ISTP",
     }
     assert judge_payload["history"] == []
     assert result.phase == GamePhase.VERDICT
@@ -76,7 +76,7 @@ def test_removed_ai_is_not_called_or_judged_in_the_next_round(
     )
 
     assert Counter(role for role, _ in gateway.answer_calls) == Counter(
-        {"ai_wit": 1, "ai_story": 1}
+        {"ENFP": 1, "ISTP": 1}
     )
     assert "player_02" not in gateway.judge_calls[1]["answers"]
     assert gateway.judge_calls[1]["history"] == [first_result.verdict]

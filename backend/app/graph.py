@@ -9,6 +9,7 @@ from langgraph.types import Send
 
 from app.agents import AgentGateway, JudgeDecision
 from app.domain import (
+    MBTI_TYPES,
     QUESTIONS,
     Game,
     GamePhase,
@@ -41,11 +42,7 @@ class AnswerNodeState(TypedDict):
     gateway: AgentGateway
 
 
-_ANSWER_NODE_NAMES = {
-    "ai_empath": "answer_ai_empath",
-    "ai_wit": "answer_ai_wit",
-    "ai_story": "answer_ai_story",
-}
+_ANSWER_NODE_NAMES = {role: f"answer_{role.lower()}" for role in MBTI_TYPES}
 
 
 def _route_answer_agents(state: RoundState) -> list[Send] | Literal["judge"]:

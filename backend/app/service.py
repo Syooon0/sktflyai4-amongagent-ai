@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.agents import AgentGateway, AgentGatewayError, MAX_ANSWER_LENGTH
 from app.domain import (
+    MBTI_TYPES,
     PLAYER_IDS,
     QUESTIONS,
     Game,
@@ -85,7 +86,7 @@ class GameService:
 
     def create_game(self) -> tuple[PublicGame, str]:
         player_token = secrets.token_urlsafe(32)
-        roles: list[PlayerRole] = ["human", "ai_empath", "ai_wit", "ai_story"]
+        roles: list[PlayerRole] = ["human", *random.sample(MBTI_TYPES, 3)]
         random.shuffle(roles)
         game = Game(
             game_id=str(uuid4()),

@@ -154,6 +154,9 @@ def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
     fake_gateway_factory: Callable[[Sequence[str]], object],
 ) -> None:
     monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    monkeypatch.setattr(
+        "app.service.random.sample", lambda population, k: ["INTJ", "ENFP", "ISTP"]
+    )
     client = configured_client(fake_gateway_factory(["player_01"]))
     game, token = create_game(client)
     headers = {"X-Player-Token": token}
@@ -172,9 +175,9 @@ def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
     assert finished["phase"] == "finished"
     assert [player["role"] for player in finished["players"]] == [
         "human",
-        "ai_empath",
-        "ai_wit",
-        "ai_story",
+        "INTJ",
+        "ENFP",
+        "ISTP",
     ]
 
 
