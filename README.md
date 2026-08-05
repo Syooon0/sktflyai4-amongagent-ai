@@ -1,3 +1,4 @@
+<img width="580" height="181" alt="스크린샷 2026-08-05 오후 4 05 37" src="https://github.com/user-attachments/assets/56d735b2-818d-42ea-b20b-8ae40e449cdf" />
 # sktflyai4-amongagent-ai — Among Agents
 
 Among Agents는 인간 1명이 AI 플레이어 3명 사이에 섞여 들키지 않으려 하는
