@@ -41,6 +41,7 @@ export interface PublicGame {
   game_id: string;
   round_number: number;
   question: string;
+  question_number: number;
   phase: GamePhase;
   players: PublicPlayer[];
   verdict: Verdict | null;

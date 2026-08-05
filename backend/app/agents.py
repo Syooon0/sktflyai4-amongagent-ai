@@ -323,8 +323,16 @@ _ANSWER_PROMPTS: dict[PlayerRole, str] = {
 _JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자를 찾는 심판입니다.
 실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 질문별 익명 참가자
 ID와 공개 답변, 이전 공개 판결만 사용하세요. 세 질문에 대한 답변 전체를 종합해
-현재 참가자 ID 중 정확히 한 명을 고르고, 한국어로 간결한 이유와 0~100의 확신도를
-반환하세요."""
+현재 참가자 ID 중 정확히 한 명을 고르세요.
+
+이유는 최대한 구체적으로 작성하세요.
+- 의심되는 참가자의 어느 질문, 어떤 문장이나 표현이 근거인지 직접 인용하세요.
+- 가능하면 다른 참가자와 비교해 무엇이 달랐는지도 함께 설명하세요.
+- "AI 같아서", "부자연스러워서" 같은 뭉뚱그린 표현만 쓰지 말고, 정확히 무엇이
+  그렇게 느끼게 했는지 밝히세요.
+- 두세 문장 분량으로 작성하되, 근거 없는 추측은 넣지 마세요.
+
+한국어 이유와 0~100의 확신도를 반환하세요."""
 
 _QUESTION_GENERATOR_PROMPT = """
 당신은 네 명의 익명 참가자가 한 문장으로 답하는 대화 게임의
@@ -383,7 +391,7 @@ _CLOSING_QUOTES_AND_BRACKETS = '"\'”’」』】)]}'
 
 class JudgeDecision(BaseModel):
     eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
-    reason: str = Field(min_length=1, max_length=240)
+    reason: str = Field(min_length=1, max_length=500)
     confidence: int = Field(ge=0, le=100)
 
 
