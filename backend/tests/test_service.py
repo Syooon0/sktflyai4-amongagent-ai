@@ -5,7 +5,7 @@ from threading import Event
 import pytest
 
 from app.agents import ModelInvocationError
-from app.domain import GamePhase, QUESTIONS
+from app.domain import GamePhase
 from app.service import (
     AnswerValidationError,
     GameNotFoundError,
@@ -14,6 +14,7 @@ from app.service import (
     InvalidTokenError,
     ModelGatewayError,
 )
+from tests.conftest import TEST_QUESTIONS
 
 
 def service_with_human_in_first_slot(
@@ -24,7 +25,8 @@ def service_with_human_in_first_slot(
     return GameService(gateway)  # type: ignore[arg-type]
 
 
-def test_create_game_assigns_one_random_human_slot_and_separate_opaque_token(
+@pytest.mark.asyncio
+async def test_create_game_assigns_one_random_human_slot_and_separate_opaque_token(
     monkeypatch: pytest.MonkeyPatch,
     fake_gateway_factory: Callable[[Sequence[str]], object],
 ) -> None:
@@ -38,15 +40,15 @@ def test_create_game_assigns_one_random_human_slot_and_separate_opaque_token(
     monkeypatch.setattr("app.service.random.shuffle", reverse_roles)
     service = GameService(fake_gateway_factory(["player_02"]))  # type: ignore[arg-type]
 
-    first_game, first_token = service.create_game()
-    second_game, second_token = service.create_game()
+    first_game, first_token = await service.create_game()
+    second_game, second_token = await service.create_game()
 
     assert first_game.game_id != second_game.game_id
     assert first_token != second_token
     assert first_token not in {first_game.game_id, second_game.game_id}
     assert len(first_token) >= 32
     assert first_game.phase == GamePhase.AWAITING_ANSWER
-    assert first_game.question == QUESTIONS[0]
+    assert first_game.question == TEST_QUESTIONS[0]
     assert len(first_game.players) == 4
     assert shuffle_calls == 2
     assert [player.id for player in first_game.players if player.is_you] == ["player_04"]
@@ -62,14 +64,15 @@ def test_create_game_assigns_one_random_human_slot_and_separate_opaque_token(
     assert all("role" not in player.model_dump() for player in first_game.players)
 
 
-def test_get_game_requires_the_issuing_token_and_existing_game(
+@pytest.mark.asyncio
+async def test_get_game_requires_the_issuing_token_and_existing_game(
     monkeypatch: pytest.MonkeyPatch,
     fake_gateway_factory: Callable[[Sequence[str]], object],
 ) -> None:
     service = service_with_human_in_first_slot(
         monkeypatch, fake_gateway_factory(["player_02"])
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
     assert service.get_game(game.game_id, token) == game
     with pytest.raises(InvalidTokenError):
@@ -90,7 +93,7 @@ async def test_submit_answer_rejects_empty_or_over_120_characters(
     service = service_with_human_in_first_slot(
         monkeypatch, fake_gateway_factory(["player_02"])
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
     with pytest.raises(AnswerValidationError):
         await service.submit_answer(game.game_id, token, answer)
@@ -106,27 +109,30 @@ async def test_submit_trims_answer_rejects_duplicate_and_next_advances_round(
     service = service_with_human_in_first_slot(
         monkeypatch, fake_gateway_factory(["player_02", "player_03"])
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
-    verdict_game = await service.submit_answer(
+    first_question_game = await service.submit_answer(
         game.game_id, token, "  사람이 쓴 첫 답변입니다.  "
     )
+    assert first_question_game.phase == GamePhase.AWAITING_ANSWER
+    assert next(
+        player for player in first_question_game.players if player.is_you
+    ).answer == "사람이 쓴 첫 답변입니다."
 
+    await service.submit_answer(game.game_id, token, "답변 2")
+    verdict_game = await service.submit_answer(game.game_id, token, "답변 3")
     assert verdict_game.phase == GamePhase.VERDICT
-    assert next(player for player in verdict_game.players if player.is_you).answer == (
-        "사람이 쓴 첫 답변입니다."
-    )
     with pytest.raises(InvalidPhaseError):
         await service.submit_answer(game.game_id, token, "중복 답변입니다.")
 
-    next_game = service.next_round(game.game_id, token)
+    next_game = await service.next_round(game.game_id, token)
     assert next_game.round_number == 2
-    assert next_game.question == QUESTIONS[1]
+    assert next_game.question == TEST_QUESTIONS[0]
     assert next_game.phase == GamePhase.AWAITING_ANSWER
     assert next_game.verdict is None
     assert all(player.answer is None for player in next_game.players)
     with pytest.raises(InvalidPhaseError):
-        service.next_round(game.game_id, token)
+        await service.next_round(game.game_id, token)
 
 
 @pytest.mark.asyncio
@@ -145,11 +151,14 @@ async def test_gateway_failure_restores_state_and_allows_retry(
                 raise ModelInvocationError("model unavailable")
             return self.fallback.answer(role, question)
 
-        def judge(self, question: str, answers: dict[str, str], history: list[object]):
-            return self.fallback.judge(question, answers, history)
+        def generate_questions(self) -> list[str]:
+            return self.fallback.generate_questions()
+
+        def judge(self, rounds, history):
+            return self.fallback.judge(rounds, history)
 
     service = service_with_human_in_first_slot(monkeypatch, FailsOnceGateway())
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
     with pytest.raises(ModelGatewayError, match="model unavailable"):
         await service.submit_answer(game.game_id, token, "재시도할 답변입니다.")
@@ -161,7 +170,7 @@ async def test_gateway_failure_restores_state_and_allows_retry(
     retried = await service.submit_answer(
         game.game_id, token, "재시도할 답변입니다."
     )
-    assert retried.phase == GamePhase.VERDICT
+    assert retried.phase == GamePhase.AWAITING_ANSWER
 
 
 @pytest.mark.asyncio
@@ -177,7 +186,7 @@ async def test_unexpected_round_error_rolls_back_and_is_not_translated(
         fake_gateway_factory(["player_02"]),  # type: ignore[arg-type]
         round_runner=broken_round,  # type: ignore[arg-type]
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
     with pytest.raises(AssertionError, match="round reducer bug"):
         await service.submit_answer(game.game_id, token, "사람 답변입니다.")
@@ -200,11 +209,14 @@ async def test_concurrent_submission_is_rejected_while_first_is_processing(
             assert release.wait(timeout=2)
             return fallback.answer(role, question)
 
-        def judge(self, question: str, answers: dict[str, str], history: list[object]):
-            return fallback.judge(question, answers, history)
+        def generate_questions(self) -> list[str]:
+            return fallback.generate_questions()
+
+        def judge(self, rounds, history):
+            return fallback.judge(rounds, history)
 
     service = service_with_human_in_first_slot(monkeypatch, BlockingGateway())
-    game, token = service.create_game()
+    game, token = await service.create_game()
     first = asyncio.create_task(
         service.submit_answer(game.game_id, token, "첫 번째 답변입니다.")
     )
@@ -214,7 +226,7 @@ async def test_concurrent_submission_is_rejected_while_first_is_processing(
         await service.submit_answer(game.game_id, token, "두 번째 답변입니다.")
 
     release.set()
-    assert (await first).phase == GamePhase.VERDICT
+    assert (await first).phase == GamePhase.AWAITING_ANSWER
 
 
 @pytest.mark.asyncio
@@ -235,7 +247,7 @@ async def test_cancelled_submission_restores_the_pre_submit_state(
         fake_gateway_factory(["player_02"]),  # type: ignore[arg-type]
         round_runner=blocking_round,
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
     submission = asyncio.create_task(
         service.submit_answer(game.game_id, token, "취소할 답변입니다.")
     )
@@ -249,18 +261,19 @@ async def test_cancelled_submission_restores_the_pre_submit_state(
     assert service.get_game(game.game_id, token) == game
 
 
-def test_next_round_requires_token_existing_game_and_verdict_phase(
+@pytest.mark.asyncio
+async def test_next_round_requires_token_existing_game_and_verdict_phase(
     monkeypatch: pytest.MonkeyPatch,
     fake_gateway_factory: Callable[[Sequence[str]], object],
 ) -> None:
     service = service_with_human_in_first_slot(
         monkeypatch, fake_gateway_factory(["player_02"])
     )
-    game, token = service.create_game()
+    game, token = await service.create_game()
 
     with pytest.raises(InvalidTokenError):
-        service.next_round(game.game_id, "wrong-token")
+        await service.next_round(game.game_id, "wrong-token")
     with pytest.raises(GameNotFoundError):
-        service.next_round("missing-game", token)
+        await service.next_round("missing-game", token)
     with pytest.raises(InvalidPhaseError):
-        service.next_round(game.game_id, token)
+        await service.next_round(game.game_id, token)

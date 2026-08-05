@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.agents import AgentGateway, JudgeDecision, ModelOutputError
+from app.agents import AgentGateway, JudgeDecision, ModelOutputError, QuestionSet
 from app.domain import Verdict
 
 
@@ -26,14 +26,20 @@ class StubRunnable:
 
 
 class StubChatModel(StubRunnable):
-    def __init__(self, answer_contents: Sequence[Any], judge_responses: Sequence[Any]) -> None:
+    def __init__(
+        self,
+        answer_contents: Sequence[Any],
+        judge_responses: Sequence[Any],
+        question_responses: Sequence[Any] = (),
+    ) -> None:
         super().__init__([SimpleNamespace(content=content) for content in answer_contents])
         self.judge_model = StubRunnable(judge_responses)
-        self.structured_schema: type[Any] | None = None
+        self.question_model = StubRunnable(question_responses)
+        self.structured_schemas: list[type[Any]] = []
 
     def with_structured_output(self, schema: type[Any]) -> StubRunnable:
-        self.structured_schema = schema
-        return self.judge_model
+        self.structured_schemas.append(schema)
+        return self.judge_model if schema is JudgeDecision else self.question_model
 
 
 def gateway_with_stub(
@@ -41,8 +47,9 @@ def gateway_with_stub(
     *,
     answer_contents: Sequence[Any] = (),
     judge_responses: Sequence[Any] = (),
+    question_responses: Sequence[Any] = (),
 ) -> tuple[AgentGateway, StubChatModel, dict[str, Any]]:
-    model = StubChatModel(answer_contents, judge_responses)
+    model = StubChatModel(answer_contents, judge_responses, question_responses)
     constructor_kwargs: dict[str, Any] = {}
 
     def build_chat_model(**kwargs: Any) -> StubChatModel:
@@ -99,7 +106,7 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
         {"temperature": 0.95},
         {"temperature": 0.95},
     ]
-    assert model.structured_schema is JudgeDecision
+    assert model.structured_schemas == [JudgeDecision, QuestionSet]
 
 
 @pytest.mark.parametrize(
@@ -177,7 +184,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
         )
     ]
 
-    decision = gateway.judge("오늘의 질문", answers, history)
+    decision = gateway.judge([("오늘의 질문", answers)], history)
 
     assert decision == JudgeDecision(
         eliminated_player_id="player_03",
@@ -186,8 +193,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
     )
     payload = json.loads(model.judge_model.calls[0][1].content)
     assert payload == {
-        "question": "오늘의 질문",
-        "answers": answers,
+        "rounds": [{"question": "오늘의 질문", "answers": answers}],
         "verdict_history": [history[0].model_dump(mode="json")],
     }
     assert not {"role", "prompt", "persona"} & payload.keys()
@@ -213,7 +219,7 @@ def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
     )
 
     with pytest.raises(ModelOutputError, match="outside the supplied alive IDs"):
-        gateway.judge("질문", {"player_01": "답변"}, [])
+        gateway.judge([("질문", {"player_01": "답변"})], [])
 
 
 def test_gateway_validates_structured_judge_fields(
@@ -236,7 +242,7 @@ def test_gateway_validates_structured_judge_fields(
     )
 
     with pytest.raises(ModelOutputError) as error:
-        gateway.judge("질문", {"player_01": "답변"}, [])
+        gateway.judge([("질문", {"player_01": "답변"})], [])
 
     assert isinstance(error.value.__cause__, ValidationError)
     assert len(model.judge_model.calls) == 2
@@ -261,7 +267,7 @@ def test_gateway_retries_only_the_invalid_judge_once(
         ],
     )
 
-    decision = gateway.judge("질문", {"player_01": "답변"}, [])
+    decision = gateway.judge([("질문", {"player_01": "답변"})], [])
 
     assert decision.confidence == 73
     assert len(model.judge_model.calls) == 2
