@@ -35,6 +35,9 @@ _JUDGE_PROMPT = """당신은 현재 답변 중 인간 참가자를 찾는 심판
 공개 답변, 이전 공개 판결만 사용하세요. 현재 답변 목록의 ID 중 정확히 한 명을 고르고,
 한국어로 간결한 이유와 0~100의 확신도를 반환하세요."""
 
+_SENTENCE_END = re.compile(r"[.!?。！？…]+")
+_CLOSING_QUOTES_AND_BRACKETS = '"\'”’」』】)]}'
+
 
 class JudgeDecision(BaseModel):
     eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
@@ -120,5 +123,11 @@ def _validate_korean_sentence(answer: str) -> None:
         raise ValueError(f"Answer model exceeded {MAX_ANSWER_LENGTH} characters")
     if not re.search(r"[가-힣]", answer):
         raise ValueError("Answer model must return a Korean sentence")
-    if "\n" in answer or not re.fullmatch(r"[^.!?。！？]*[.!?。！？]?", answer):
+    sentence = answer.rstrip(_CLOSING_QUOTES_AND_BRACKETS)
+    sentence_endings = list(_SENTENCE_END.finditer(sentence))
+    if (
+        "\r" in answer
+        or "\n" in answer
+        or any(match.end() != len(sentence) for match in sentence_endings)
+    ):
         raise ValueError("Answer model must return exactly one sentence")
