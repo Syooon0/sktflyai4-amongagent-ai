@@ -10,12 +10,13 @@ const initialGame = {
   game_id: "game-123",
   round_number: 1,
   question: "비 오는 날 가장 먼저 떠오르는 장면을 한 문장으로 표현해 주세요.",
+  question_number: 1,
   phase: "awaiting_answer",
   players: [
-    { id: "player_01", character_emoji: "🤖", color: "coral", is_you: false, answer: null, is_alive: true },
-    { id: "player_02", character_emoji: "👾", color: "blue", is_you: true, answer: null, is_alive: true },
-    { id: "player_03", character_emoji: "🛸", color: "yellow", is_you: false, answer: null, is_alive: true },
-    { id: "player_04", character_emoji: "🦾", color: "mint", is_you: false, answer: null, is_alive: true },
+    { id: "player_01", nickname: "PLAYER 01", character_emoji: "🤖", color: "coral", is_you: false, answer: null, is_alive: true },
+    { id: "player_02", nickname: "PLAYER 02", character_emoji: "👾", color: "blue", is_you: true, answer: null, is_alive: true },
+    { id: "player_03", nickname: "PLAYER 03", character_emoji: "🛸", color: "yellow", is_you: false, answer: null, is_alive: true },
+    { id: "player_04", nickname: "PLAYER 04", character_emoji: "🦾", color: "mint", is_you: false, answer: null, is_alive: true },
   ],
   verdict: null,
   verdict_history: [],
@@ -35,12 +36,24 @@ const verdictGame = {
     eliminated_player_id: "player_03",
     reason: "표현이 지나치게 정돈되어 AI처럼 느껴졌어요.",
     confidence: 84,
+    player_scores: {
+      player_01: 40,
+      player_02: 62,
+      player_03: 84,
+      player_04: 55,
+    },
   },
   verdict_history: [
     {
       eliminated_player_id: "player_03",
       reason: "표현이 지나치게 정돈되어 AI처럼 느껴졌어요.",
       confidence: 84,
+      player_scores: {
+        player_01: 40,
+        player_02: 62,
+        player_03: 84,
+        player_04: 55,
+      },
     },
   ],
 } as const;
@@ -50,6 +63,7 @@ const secondRoundGame = {
   round_number: 2,
   question: "로봇에게도 휴일이 필요하다면 무엇을 하며 보내야 할까요?",
   phase: "awaiting_answer",
+  question_number: 1,
   players: verdictGame.players.map((player) => ({ ...player, answer: null })),
   verdict: null,
 } as const;
@@ -59,10 +73,10 @@ const finishedGame = {
   phase: "finished",
   result: "human_won",
   players: [
-    { ...verdictGame.players[0], role: "ai_empath" },
+    { ...verdictGame.players[0], role: "INTJ" },
     { ...verdictGame.players[1], role: "human" },
-    { ...verdictGame.players[2], role: "ai_wit" },
-    { ...verdictGame.players[3], role: "ai_story" },
+    { ...verdictGame.players[2], role: "ENFP" },
+    { ...verdictGame.players[3], role: "ISTP" },
   ],
 } as const;
 
@@ -203,6 +217,57 @@ describe("Among Agents arena", () => {
         headers: { "X-Player-Token": "secret-token" },
       }),
     );
+  });
+
+  it("keeps the old question visible until the next-question countdown finishes", async () => {
+    vi.useFakeTimers();
+    mockReducedMotion(false);
+    const nextQuestionGame = {
+      ...initialGame,
+      question: "다음 질문은 3초 뒤에 보여야 합니다.",
+      question_number: 2,
+      players: [
+        { ...initialGame.players[0], answer: "빗소리를 들으며 창밖을 봐요." },
+        { ...initialGame.players[1], answer: "우산 위로 빗방울이 춤춰요." },
+        { ...initialGame.players[2], answer: "도로 위 네온빛이 번져요." },
+        { ...initialGame.players[3], answer: "젖은 흙 냄새가 떠올라요." },
+      ],
+    };
+    mockFetchSequence(
+      jsonResponse({ status: "ok", api_key_configured: true }),
+      jsonResponse({ game: initialGame, player_token: "secret-token" }, 201),
+      jsonResponse(nextQuestionGame),
+    );
+    render(<App />);
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "게임 시작" }));
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("한 줄 답변"), {
+      target: { value: "우산 위로 빗방울이 춤춰요." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "답변 제출" }));
+    await act(async () => {});
+
+    for (let index = 0; index < nextQuestionGame.players.length + 1; index += 1) {
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+    }
+
+    expect(screen.getByText(initialGame.question)).toBeInTheDocument();
+    expect(screen.queryByText(nextQuestionGame.question)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("3");
+
+    for (let tick = 0; tick < 4; tick += 1) {
+      await act(async () => {
+        await vi.advanceTimersToNextTimerAsync();
+      });
+    }
+
+    expect(screen.getByText(nextQuestionGame.question)).toBeInTheDocument();
+    expect(screen.queryByText(initialGame.question)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("한 줄 답변")).toHaveValue("");
   });
 
   it.each([false, true])(
@@ -346,9 +411,9 @@ describe("Among Agents arena", () => {
 
     expect(await screen.findByRole("heading", { name: "인간 승리!" })).toBeInTheDocument();
     expect(screen.getByText("HUMAN")).toBeInTheDocument();
-    expect(screen.getByText("AI · 공감형")).toBeInTheDocument();
-    expect(screen.getByText("AI · 재치형")).toBeInTheDocument();
-    expect(screen.getByText("AI · 경험형")).toBeInTheDocument();
+    expect(screen.getByText("AI · INTJ 전략가")).toBeInTheDocument();
+    expect(screen.getByText("AI · ENFP 활동가")).toBeInTheDocument();
+    expect(screen.getByText("AI · ISTP 재주꾼")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다시 시작" }));
 

@@ -9,7 +9,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from openai import OpenAIError
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.domain import MBTI_TYPES, PlayerRole, Verdict
 
@@ -320,24 +320,40 @@ _ANSWER_PROMPTS: dict[PlayerRole, str] = {
     for role, trait in _MBTI_PERSONA_PROMPTS.items()
 }
 
-_JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자를 찾는 심판입니다.
+_JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자를 찾아 탈락시키는
+심판입니다. 나머지는 모두 AI입니다.
+
+중요: eliminated_player_id에 반환하는 사람은 "AI 같아서 의심되는 사람"이 아니라
+"가장 인간이라고 확신하는 사람"입니다. 당신이 고른 사람은 즉시 게임에서
+탈락합니다 — 진짜 인간을 골랐다면 당신이 승리합니다. 절대로 "이 사람은 AI
+같지 않아서 골랐다" 같은 소거법이 아니라, "이 사람이 실제 인간처럼 보이는
+적극적인 이유"를 근거로 고르세요.
+
 실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 질문별 익명 참가자
 ID와 공개 답변, 이전 공개 판결, 그리고 각 참가자 ID에 매핑된 공개 별명(nicknames)만
-사용하세요. 세 질문에 대한 답변 전체를 종합해 현재 참가자 ID 중 정확히 한 명을
-고르세요.
+사용하세요.
+
+판단 순서:
+1. 살아있는 참가자 전원에 대해 답변이 "인간일 가능성" 점수를 0~100으로
+   매기세요. player_scores는 참가자 ID를 키로 하고, 값은 종합 점수 숫자만
+   사용하세요. 리스트, 문자열, 설명 문장은 넣지 마세요.
+2. 참가자별 점수를 비교해서, 가장 인간일 가능성이 높다고
+   종합된 참가자 ID를 eliminated_player_id로 반환하세요.
+3. confidence에는 그 종합 판단에 대한 전체 확신도(0~100)를 반환하세요.
 
 이유(reason)를 쓸 때는 반드시 별명으로 참가자를 지칭하세요. "player_02"처럼 내부
-ID를 그대로 언급하지 마세요. eliminated_player_id 필드에는 별명이 아니라 원래
-참가자 ID를 반환하세요.
+ID를 그대로 언급하지 마세요. eliminated_player_id와 player_scores의 키에는
+별명이 아니라 원래 참가자 ID를 사용하세요.
 
 이유는 최대한 구체적으로 작성하세요.
-- 의심되는 참가자의 어느 질문, 어떤 문장이나 표현이 근거인지 직접 인용하세요.
-- 가능하면 다른 참가자와 비교해 무엇이 달랐는지도 함께 설명하세요.
-- "AI 같아서", "부자연스러워서" 같은 뭉뚱그린 표현만 쓰지 말고, 정확히 무엇이
-  그렇게 느끼게 했는지 밝히세요.
+- 고른 참가자의 어느 질문, 어떤 문장이나 표현이 "인간답다"는 근거인지 직접
+  인용하세요. (예: 개인적 경험, 감정의 모순, 즉흥적인 오타나 말투 등)
+- 다른 참가자들의 답변과 비교해 왜 이 사람만 더 인간처럼 느껴지는지 설명하세요.
+- "AI 같아서", "부자연스러워서"처럼 다른 사람을 깎아내리는 소거법 표현은 쓰지
+  마세요. 반드시 고른 사람이 인간인 이유를 정면으로 설명하세요.
 - 두세 문장 분량으로 작성하되, 근거 없는 추측은 넣지 마세요.
 
-한국어 이유와 0~100의 확신도를 반환하세요."""
+한국어 이유, player_scores, 확신도를 반환하세요."""
 
 _QUESTION_GENERATOR_PROMPT = """
 당신은 네 명의 익명 참가자가 한 문장으로 답하는 대화 게임의
@@ -398,6 +414,43 @@ class JudgeDecision(BaseModel):
     eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
     reason: str = Field(min_length=1, max_length=500)
     confidence: int = Field(ge=0, le=100)
+    player_scores: dict[str, int]
+
+
+class _JudgeModelOutput(BaseModel):
+    """Raw structured output requested from the model.
+
+    Keep the advertised structured-output schema simple. A permissive validator
+    still accepts older list-shaped scores if a non-strict stub or model returns them.
+    """
+
+    eliminated_player_id: str = Field(pattern=r"^player_\d{2}$")
+    reason: str = Field(min_length=1, max_length=500)
+    confidence: int = Field(ge=0, le=100)
+    player_scores: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("player_scores", mode="before")
+    @classmethod
+    def _coerce_scores(cls, value: Any) -> dict[str, int]:
+        if not isinstance(value, dict):
+            return {}
+        coerced: dict[str, int] = {}
+        for player_id, score_value in value.items():
+            if isinstance(score_value, list):
+                numeric_scores = [
+                    score for score in score_value if isinstance(score, int | float)
+                ]
+                score = (
+                    round(sum(numeric_scores) / len(numeric_scores))
+                    if numeric_scores
+                    else 50
+                )
+            elif isinstance(score_value, int | float):
+                score = round(score_value)
+            else:
+                score = 50
+            coerced[str(player_id)] = max(0, min(100, score))
+        return coerced
 
 
 class AgentGatewayError(Exception):
@@ -428,7 +481,7 @@ class AgentGateway:
             timeout=timeout_seconds,
             max_retries=1,
         )
-        self._judge_model = self._model.with_structured_output(JudgeDecision)
+        self._judge_model = self._model.with_structured_output(_JudgeModelOutput)
         self._question_model = self._model.with_structured_output(QuestionSet)
 
     def generate_questions(self) -> list[str]:
@@ -494,24 +547,123 @@ class AgentGateway:
         ]
         for attempt in range(_OUTPUT_ATTEMPTS):
             try:
-                decision = _invoke(self._judge_model, messages)
-                if not isinstance(decision, JudgeDecision):
-                    decision = JudgeDecision.model_validate(decision)
-                if decision.eliminated_player_id not in alive_ids:
+                raw = _invoke(self._judge_model, messages)
+                if not isinstance(raw, _JudgeModelOutput):
+                    raw = _JudgeModelOutput.model_validate(raw)
+                if raw.eliminated_player_id not in alive_ids:
                     raise ModelOutputError(
                         "Judge selected a player outside the supplied alive IDs"
                     )
-                return decision
-            except (ValidationError, OutputParserException) as error:
-                output_error = ModelOutputError(
-                    "Judge model returned invalid structured output"
+                averaged_scores = _normalize_judge_scores(raw.player_scores, alive_ids)
+                return JudgeDecision(
+                    eliminated_player_id=raw.eliminated_player_id,
+                    reason=raw.reason,
+                    confidence=raw.confidence,
+                    player_scores=averaged_scores,
                 )
+            except (ValidationError, OutputParserException) as error:
                 if attempt == _OUTPUT_ATTEMPTS - 1:
-                    raise output_error from error
-            except ModelOutputError:
+                    return _fallback_judge_decision(rounds, alive_ids, nicknames)
+            except (ModelInvocationError, ModelOutputError):
                 if attempt == _OUTPUT_ATTEMPTS - 1:
-                    raise
+                    return _fallback_judge_decision(rounds, alive_ids, nicknames)
         raise AssertionError("judge output retry loop exhausted")
+
+
+def _normalize_judge_scores(
+    raw_scores: dict[str, int],
+    alive_ids: set[str],
+) -> dict[str, int]:
+    """Return one forgiving 0-100 score for every alive player."""
+
+    normalized: dict[str, int] = {}
+    for player_id in alive_ids:
+        score = raw_scores.get(player_id, 50)
+        normalized[player_id] = max(0, min(100, round(score)))
+    return normalized
+
+
+def _fallback_judge_decision(
+    rounds: list[tuple[str, dict[str, str]]],
+    alive_ids: set[str],
+    nicknames: dict[str, str],
+) -> JudgeDecision:
+    player_answers = {
+        player_id: [answers.get(player_id, "") for _, answers in rounds]
+        for player_id in alive_ids
+    }
+    player_scores = {
+        player_id: _score_fallback_answers(answers)
+        for player_id, answers in player_answers.items()
+    }
+    eliminated_player_id = max(
+        sorted(alive_ids),
+        key=lambda player_id: player_scores[player_id],
+    )
+    nickname = nicknames.get(eliminated_player_id, eliminated_player_id)
+    strongest_answer = _strongest_answer(player_answers[eliminated_player_id])
+    return JudgeDecision(
+        eliminated_player_id=eliminated_player_id,
+        reason=(
+            f"모델 판정이 불안정해 보조 기준으로 판단했습니다. {nickname}의 "
+            f"'{strongest_answer}' 답변이 가장 즉흥적이고 개인적인 말투에 가까워 "
+            "인간 후보로 지목했습니다."
+        ),
+        confidence=max(35, min(72, player_scores[eliminated_player_id])),
+        player_scores=player_scores,
+    )
+
+
+def _score_fallback_answers(answers: list[str]) -> int:
+    text = " ".join(answer.strip() for answer in answers if answer.strip())
+    if not text:
+        return 30
+
+    score = 45
+    colloquial_markers = (
+        "그냥", "약간", "근데", "솔직히", "뭔가", "굳이", "좀", "ㅋㅋ", "아마",
+    )
+    sensory_markers = (
+        "냄새", "소리", "느낌", "기분", "맛", "창밖", "비", "색", "공기", "따뜻",
+    )
+    personal_markers = (
+        "나는", "제가", "내", "저는", "좋아", "싫어", "떠올라", "하고 싶", "편해",
+    )
+    formulaic_markers = (
+        "결론적으로", "종합해", "장단점", "개인의 취향", "의견을 존중", "것 같습니다",
+    )
+
+    score += sum(5 for marker in colloquial_markers if marker in text)
+    score += sum(4 for marker in sensory_markers if marker in text)
+    score += sum(4 for marker in personal_markers if marker in text)
+    score -= sum(8 for marker in formulaic_markers if marker in text)
+
+    average_length = sum(len(answer) for answer in answers if answer) / max(
+        1,
+        len([answer for answer in answers if answer]),
+    )
+    if 14 <= average_length <= 55:
+        score += 8
+    elif average_length > 90:
+        score -= 10
+    elif average_length < 8:
+        score -= 6
+
+    unique_lengths = {len(answer) for answer in answers if answer}
+    if len(unique_lengths) > 1:
+        score += 4
+
+    punctuation_count = sum(text.count(mark) for mark in ("!", "?", "…"))
+    score += min(6, punctuation_count * 2)
+
+    return max(5, min(95, score))
+
+
+def _strongest_answer(answers: list[str]) -> str:
+    non_empty = [answer.strip() for answer in answers if answer.strip()]
+    if not non_empty:
+        return "답변 없음"
+    return max(non_empty, key=lambda answer: (_score_fallback_answers([answer]), -len(answer)))
 
 
 def _invoke(model: Any, messages: list[Any]) -> Any:

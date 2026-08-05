@@ -68,6 +68,7 @@ class Verdict(BaseModel):
     eliminated_player_id: PlayerId
     reason: str
     confidence: int = Field(ge=0, le=100)
+    player_scores: dict[PlayerId, int]
 
 
 class PublicPlayer(BaseModel):

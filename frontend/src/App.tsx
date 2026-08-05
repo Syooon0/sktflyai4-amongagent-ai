@@ -75,6 +75,8 @@ function displayedGame(
 
   return {
     ...presentation.result,
+    question: current.question,
+    question_number: current.question_number,
     phase: "judging",
     result: null,
     verdict: showVerdict ? presentation.result.verdict : null,

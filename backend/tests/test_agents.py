@@ -6,7 +6,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.agents import AgentGateway, JudgeDecision, ModelOutputError, QuestionSet
+from app.agents import (
+    AgentGateway,
+    JudgeDecision,
+    _fallback_judge_decision,
+    ModelOutputError,
+    QuestionSet,
+    _JudgeModelOutput,
+)
 from app.domain import Verdict
 
 
@@ -39,7 +46,7 @@ class StubChatModel(StubRunnable):
 
     def with_structured_output(self, schema: type[Any]) -> StubRunnable:
         self.structured_schemas.append(schema)
-        return self.judge_model if schema is JudgeDecision else self.question_model
+        return self.judge_model if schema is _JudgeModelOutput else self.question_model
 
 
 def gateway_with_stub(
@@ -106,7 +113,7 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
         {"temperature": 0.95},
         {"temperature": 0.95},
     ]
-    assert model.structured_schemas == [JudgeDecision, QuestionSet]
+    assert model.structured_schemas == [_JudgeModelOutput, QuestionSet]
 
 
 @pytest.mark.parametrize(
@@ -169,6 +176,10 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
                 "eliminated_player_id": "player_03",
                 "reason": "표현이 지나치게 정돈되어 있습니다.",
                 "confidence": 74,
+                "player_scores": {
+                    "player_01": [20, 22, 24],
+                    "player_03": [72, 74, 76],
+                },
             }
         ],
     )
@@ -185,6 +196,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
             eliminated_player_id="player_02",
             reason="이전 공개 판결입니다.",
             confidence=61,
+            player_scores={},
         )
     ]
 
@@ -194,6 +206,7 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
         eliminated_player_id="player_03",
         reason="표현이 지나치게 정돈되어 있습니다.",
         confidence=74,
+        player_scores={"player_01": 22, "player_03": 74},
     )
     payload = json.loads(model.judge_model.calls[0][1].content)
     assert payload == {
@@ -204,30 +217,104 @@ def test_gateway_uses_structured_judge_output_with_only_public_payload(
     assert not {"role", "prompt", "persona"} & payload.keys()
 
 
-def test_gateway_rejects_judge_id_outside_supplied_alive_answers(
+def test_gateway_accepts_aggregate_or_missing_judge_scores(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     gateway, _, _ = gateway_with_stub(
         monkeypatch,
         judge_responses=[
-            JudgeDecision(
+            {
+                "eliminated_player_id": "player_03",
+                "reason": "말투가 가장 생활감 있게 느껴집니다.",
+                "confidence": 68,
+                "player_scores": {
+                    "player_01": 121,
+                    "player_03": [70, 72],
+                },
+            }
+        ],
+    )
+
+    decision = gateway.judge(
+        [
+            (
+                "오늘의 질문",
+                {
+                    "player_01": "창밖을 봐요.",
+                    "player_02": "젖은 흙 냄새가 좋아요.",
+                    "player_03": "빗소리를 들어요.",
+                },
+            )
+        ],
+        [],
+        {
+            "player_01": "수상한 스컹크",
+            "player_02": "어색한 수달",
+            "player_03": "이상한 토끼",
+        },
+    )
+
+    assert decision.player_scores == {
+        "player_01": 100,
+        "player_02": 50,
+        "player_03": 71,
+    }
+
+
+def test_gateway_falls_back_when_judge_id_is_outside_supplied_alive_answers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gateway, _, _ = gateway_with_stub(
+        monkeypatch,
+        judge_responses=[
+            _JudgeModelOutput(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
+                player_scores={"player_04": [50, 50, 50]},
             ),
-            JudgeDecision(
+            _JudgeModelOutput(
                 eliminated_player_id="player_04",
                 reason="선택 이유입니다.",
                 confidence=50,
+                player_scores={"player_04": [50, 50, 50]},
             ),
         ],
     )
 
-    with pytest.raises(ModelOutputError, match="outside the supplied alive IDs"):
-        gateway.judge([("질문", {"player_01": "답변"})], [], {"player_01": "수상한 스컹크"})
+    decision = gateway.judge(
+        [("질문", {"player_01": "솔직히 그냥 빗소리 들으면 기분이 좀 편해요."})],
+        [],
+        {"player_01": "수상한 스컹크"},
+    )
+
+    assert decision.eliminated_player_id == "player_01"
+    assert decision.confidence > 35
+    assert decision.player_scores["player_01"] > 50
+    assert "솔직히 그냥 빗소리" in decision.reason
 
 
-def test_gateway_validates_structured_judge_fields(
+def test_fallback_judge_scores_answers_differently() -> None:
+    decision = _fallback_judge_decision(
+        [
+            (
+                "질문",
+                {
+                    "player_01": "결론적으로 양쪽 모두 장단점이 있습니다.",
+                    "player_02": "근데 저는 비 냄새 나면 그냥 창밖을 보게 돼요.",
+                },
+            )
+        ],
+        {"player_01", "player_02"},
+        {"player_01": "수상한 스컹크", "player_02": "어색한 수달"},
+    )
+
+    assert decision.eliminated_player_id == "player_02"
+    assert decision.player_scores["player_02"] > decision.player_scores["player_01"]
+    assert len(set(decision.player_scores.values())) > 1
+
+
+def test_gateway_falls_back_when_structured_judge_fields_are_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     gateway, model, _ = gateway_with_stub(
@@ -246,10 +333,23 @@ def test_gateway_validates_structured_judge_fields(
         ],
     )
 
-    with pytest.raises(ModelOutputError) as error:
-        gateway.judge([("질문", {"player_01": "답변"})], [], {"player_01": "수상한 스컹크"})
+    decision = gateway.judge(
+        [
+            (
+                "질문",
+                {
+                    "player_01": "결론적으로 개인의 취향에 따라 다릅니다.",
+                    "player_02": "근데 저는 젖은 공기 냄새가 그냥 먼저 떠올라요.",
+                },
+            )
+        ],
+        [],
+        {"player_01": "수상한 스컹크", "player_02": "어색한 수달"},
+    )
 
-    assert isinstance(error.value.__cause__, ValidationError)
+    assert decision.eliminated_player_id == "player_02"
+    assert decision.confidence > 35
+    assert decision.player_scores["player_02"] > decision.player_scores["player_01"]
     assert len(model.judge_model.calls) == 2
 
 
@@ -268,6 +368,7 @@ def test_gateway_retries_only_the_invalid_judge_once(
                 "eliminated_player_id": "player_01",
                 "reason": "선택 이유입니다.",
                 "confidence": 73,
+                "player_scores": {"player_01": [70, 73, 76]},
             },
         ],
     )

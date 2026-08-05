@@ -338,6 +338,24 @@ input:focus-visible {
   font-weight: 950;
 }
 
+.player-card__score {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 1;
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-judge);
+  box-shadow: 2px 2px 0.3rem var(--color-shadow);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 950;
+}
+
 .player-card__bubble,
 .judge-panel__bubble {
   position: relative;

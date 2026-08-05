@@ -25,6 +25,7 @@ interface PlayerCardProps {
   isThinking: boolean;
   isEliminating: boolean;
   revealRole: boolean;
+  humanScore: number | null;
 }
 
 export default function PlayerCard({
@@ -32,6 +33,7 @@ export default function PlayerCard({
   isThinking,
   isEliminating,
   revealRole,
+  humanScore,
 }: PlayerCardProps) {
   return (
     <article
@@ -40,6 +42,12 @@ export default function PlayerCard({
       }${isEliminating ? " player-card--eliminating" : ""}`}
       data-player-id={player.id}
     >
+      {humanScore !== null && (
+        <span className="player-card__score" title="인간다움 점수">
+          {humanScore}
+        </span>
+      )}
+
       <header className="player-card__header">
         <span className="player-card__character" aria-hidden="true">
           {player.character_emoji}
