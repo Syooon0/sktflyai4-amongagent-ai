@@ -2,7 +2,7 @@
 
 import random
 from collections.abc import Callable, Sequence
-from typing import Annotated, Literal, NotRequired, TypedDict, cast
+from typing import Annotated, Literal, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
@@ -10,7 +10,7 @@ from langgraph.types import Send
 from app.agents import AgentGateway, JudgeDecision
 from app.domain import (
     MBTI_TYPES,
-    QUESTIONS,
+    TOTAL_ROUNDS,
     Game,
     GamePhase,
     GameResult,
@@ -29,11 +29,9 @@ def _merge_answers(left: dict[str, str], right: dict[str, str]) -> dict[str, str
 
 class RoundState(TypedDict):
     question: str
-    history: list[Verdict]
     ai_players: Sequence[tuple[PlayerId, PlayerRole]]
     answers: Annotated[dict[str, str], _merge_answers]
     gateway: AgentGateway
-    decision: NotRequired[JudgeDecision]
 
 
 class AnswerNodeState(TypedDict):
@@ -45,9 +43,9 @@ class AnswerNodeState(TypedDict):
 _ANSWER_NODE_NAMES = {role: f"answer_{role.lower()}" for role in MBTI_TYPES}
 
 
-def _route_answer_agents(state: RoundState) -> list[Send] | Literal["judge"]:
+def _route_answer_agents(state: RoundState) -> list[Send] | Literal["__end__"]:
     if not state["ai_players"]:
-        return "judge"
+        return END
     return [
         Send(
             _ANSWER_NODE_NAMES[role],
@@ -74,38 +72,25 @@ def _answer_node(
     return answer
 
 
-def _judge(state: RoundState) -> dict[str, JudgeDecision]:
-    answer_items = list(state["answers"].items())
-    random.shuffle(answer_items)
-    anonymous_answers = dict(answer_items)
-    return {
-        "decision": state["gateway"].judge(
-            state["question"], anonymous_answers, state["history"]
-        )
-    }
-
-
-def _build_round_graph():
+def _build_answers_graph():
     builder = StateGraph(RoundState)
     for role, node_name in _ANSWER_NODE_NAMES.items():
         builder.add_node(node_name, _answer_node(cast(PlayerRole, role)))
-    builder.add_node("judge", _judge)
     builder.add_conditional_edges(
         START,
         _route_answer_agents,
-        [*_ANSWER_NODE_NAMES.values(), "judge"],
+        [*_ANSWER_NODE_NAMES.values(), END],
     )
     for node_name in _ANSWER_NODE_NAMES.values():
-        builder.add_edge(node_name, "judge")
-    builder.add_edge("judge", END)
+        builder.add_edge(node_name, END)
     return builder.compile()
 
 
-_ROUND_GRAPH = _build_round_graph()
+_ANSWERS_GRAPH = _build_answers_graph()
 
 
 def run_round(game: Game, human_answer: str, gateway: AgentGateway) -> Game:
-    """Run independent alive AI answers, anonymous judging, and verdict reduction."""
+    """Collect one question's answers; judge only once all questions are answered."""
 
     human = next(
         (player for player in game.players if player.role == "human" and player.is_alive),
@@ -119,33 +104,49 @@ def run_round(game: Game, human_answer: str, gateway: AgentGateway) -> Game:
         for player in game.players
         if player.is_alive and player.role != "human"
     ]
-    graph_result = _ROUND_GRAPH.invoke(
+    graph_result = _ANSWERS_GRAPH.invoke(
         {
-            "question": game.question,
-            "history": list(game.verdict_history),
+            "question": game.round_questions[game.question_index],
             "ai_players": ai_players,
             "answers": {human.id: human_answer},
             "gateway": gateway,
         }
     )
-    decision = cast(JudgeDecision, graph_result["decision"])
     answers = cast(dict[str, str], graph_result["answers"])
-    return _apply_verdict(game, answers, decision)
+
+    next_game = game.model_copy(deep=True)
+    for player in next_game.players:
+        if player.is_alive:
+            player.answer = answers[player.id]
+            player.answers.append(answers[player.id])
+
+    if next_game.question_index < len(next_game.round_questions) - 1:
+        next_game.question_index += 1
+        next_game.phase = GamePhase.AWAITING_ANSWER
+        return next_game
+
+    rounds: list[tuple[str, dict[str, str]]] = []
+    for index, question in enumerate(next_game.round_questions):
+        per_question = {
+            player.id: player.answers[index]
+            for player in next_game.players
+            if player.is_alive
+        }
+        items = list(per_question.items())
+        random.shuffle(items)
+        rounds.append((question, dict(items)))
+
+    decision = gateway.judge(rounds, list(next_game.verdict_history))
+    return _apply_verdict(next_game, decision)
 
 
-def _apply_verdict(
-    game: Game,
-    answers: dict[str, str],
-    decision: JudgeDecision,
-) -> Game:
+def _apply_verdict(game: Game, decision: JudgeDecision) -> Game:
     alive_ids = {player.id for player in game.players if player.is_alive}
     if decision.eliminated_player_id not in alive_ids:
         raise ValueError("Judge must select an alive player")
 
     next_game = game.model_copy(deep=True)
     for player in next_game.players:
-        if player.is_alive:
-            player.answer = answers[player.id]
         if player.id == decision.eliminated_player_id:
             player.is_alive = False
 
@@ -163,7 +164,7 @@ def _apply_verdict(
     if eliminated_player.role == "human":
         next_game.phase = GamePhase.FINISHED
         next_game.result = GameResult.JUDGE_WON
-    elif next_game.round_number == len(QUESTIONS):
+    elif next_game.round_number == TOTAL_ROUNDS:
         next_game.phase = GamePhase.FINISHED
         next_game.result = GameResult.HUMAN_WON
     else:

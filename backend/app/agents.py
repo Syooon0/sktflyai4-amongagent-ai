@@ -47,10 +47,19 @@ _ANSWER_PROMPTS: dict[PlayerRole, str] = {
     for role, trait in _MBTI_TRAITS.items()
 }
 
-_JUDGE_PROMPT = """당신은 현재 답변 중 인간 참가자를 찾는 심판입니다.
-실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 익명 참가자 ID와
-공개 답변, 이전 공개 판결만 사용하세요. 현재 답변 목록의 ID 중 정확히 한 명을 고르고,
-한국어로 간결한 이유와 0~100의 확신도를 반환하세요."""
+_JUDGE_PROMPT = """당신은 여러 질문에 걸친 답변 중 인간 참가자를 찾는 심판입니다.
+실제 역할이나 숨은 정보는 추측 자료로 받지 않으며, 아래에 제공된 질문별 익명 참가자
+ID와 공개 답변, 이전 공개 판결만 사용하세요. 세 질문에 대한 답변 전체를 종합해
+현재 참가자 ID 중 정확히 한 명을 고르고, 한국어로 간결한 이유와 0~100의 확신도를
+반환하세요."""
+
+_QUESTION_PROMPT = """당신은 한국어 파티 게임의 질문 출제자입니다. 서로 다른 소재의
+가볍고 캐주얼한 일상 질문 세 개를 만드세요. 각 질문은 한국어 한 문장이며, 답하는
+사람이 자연스럽게 한 줄로 답할 수 있어야 합니다."""
+
+
+class QuestionSet(BaseModel):
+    questions: list[str] = Field(min_length=3, max_length=3)
 
 _SENTENCE_END = re.compile(r"[.!?。！？…]+")
 _CLOSING_QUOTES_AND_BRACKETS = '"\'”’」』】)]}'
@@ -91,6 +100,27 @@ class AgentGateway:
             max_retries=1,
         )
         self._judge_model = self._model.with_structured_output(JudgeDecision)
+        self._question_model = self._model.with_structured_output(QuestionSet)
+
+    def generate_questions(self) -> list[str]:
+        messages = [
+            SystemMessage(content=_QUESTION_PROMPT),
+            HumanMessage(content="세 개의 질문을 만들어 주세요."),
+        ]
+        for attempt in range(_OUTPUT_ATTEMPTS):
+            try:
+                result = _invoke(self._question_model, messages)
+                if not isinstance(result, QuestionSet):
+                    result = QuestionSet.model_validate(result)
+                for question in result.questions:
+                    _validate_korean_sentence(question)
+                return result.questions
+            except (ValidationError, OutputParserException, ModelOutputError) as error:
+                if attempt == _OUTPUT_ATTEMPTS - 1:
+                    raise ModelOutputError(
+                        "Question model returned invalid structured output"
+                    ) from error
+        raise AssertionError("question output retry loop exhausted")
 
     def answer(self, role: PlayerRole, question: str) -> str:
         prompt = _ANSWER_PROMPTS.get(role)
@@ -112,16 +142,17 @@ class AgentGateway:
 
     def judge(
         self,
-        question: str,
-        answers: dict[str, str],
+        rounds: list[tuple[str, dict[str, str]]],
         history: list[Verdict],
     ) -> JudgeDecision:
-        if not answers:
+        if not rounds or not rounds[0][1]:
             raise ValueError("Judge requires at least one alive player answer")
+        alive_ids = set(rounds[0][1])
 
         public_payload = {
-            "question": question,
-            "answers": answers,
+            "rounds": [
+                {"question": question, "answers": answers} for question, answers in rounds
+            ],
             "verdict_history": [verdict.model_dump() for verdict in history],
         }
         messages = [
@@ -135,7 +166,7 @@ class AgentGateway:
                 decision = _invoke(self._judge_model, messages)
                 if not isinstance(decision, JudgeDecision):
                     decision = JudgeDecision.model_validate(decision)
-                if decision.eliminated_player_id not in answers:
+                if decision.eliminated_player_id not in alive_ids:
                     raise ModelOutputError(
                         "Judge selected a player outside the supplied alive IDs"
                     )

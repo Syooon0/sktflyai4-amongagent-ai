@@ -36,11 +36,8 @@ PLAYER_PRESENTATION: dict[PlayerId, tuple[str, PlayerColor]] = {
     "player_04": ("🦾", "mint"),
 }
 
-QUESTIONS: tuple[str, ...] = (
-    "비 오는 날 가장 먼저 떠오르는 장면을 한 문장으로 표현해 주세요.",
-    "로봇에게도 휴일이 필요하다면 무엇을 하며 보내야 할까요?",
-    "친구가 중요한 약속에 한 시간 늦었을 때 첫마디는 무엇인가요?",
-)
+TOTAL_ROUNDS = 3
+QUESTIONS_PER_ROUND = 3
 
 
 class GamePhase(str, Enum):
@@ -62,6 +59,7 @@ class Player(BaseModel):
     role: PlayerRole
     token: str | None = None
     answer: str | None = None
+    answers: list[str] = Field(default_factory=list)
     is_alive: bool = True
 
 
@@ -86,8 +84,9 @@ class FinishedPublicPlayer(PublicPlayer):
 
 class PublicGame(BaseModel):
     game_id: str
-    round_number: int = Field(ge=1, le=len(QUESTIONS))
+    round_number: int = Field(ge=1, le=TOTAL_ROUNDS)
     question: str
+    question_number: int = Field(ge=1, le=QUESTIONS_PER_ROUND)
     phase: GamePhase
     players: list[PublicPlayer | FinishedPublicPlayer]
     verdict: Verdict | None
@@ -100,8 +99,9 @@ class Game(BaseModel):
 
     game_id: str
     players: list[Player]
-    round_number: int = Field(default=1, ge=1, le=len(QUESTIONS))
-    question: str = QUESTIONS[0]
+    round_number: int = Field(default=1, ge=1, le=TOTAL_ROUNDS)
+    round_questions: list[str] = Field(default_factory=list)
+    question_index: int = 0
     phase: GamePhase = GamePhase.AWAITING_ANSWER
     verdict: Verdict | None = None
     verdict_history: list[Verdict] = Field(default_factory=list)
@@ -139,7 +139,8 @@ class Game(BaseModel):
         return PublicGame(
             game_id=self.game_id,
             round_number=self.round_number,
-            question=self.question,
+            question=self.round_questions[self.question_index],
+            question_number=self.question_index + 1,
             phase=self.phase,
             players=public_players,
             verdict=self.verdict,

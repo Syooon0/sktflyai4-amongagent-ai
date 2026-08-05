@@ -10,7 +10,6 @@ from app.agents import AgentGateway, AgentGatewayError, MAX_ANSWER_LENGTH
 from app.domain import (
     MBTI_TYPES,
     PLAYER_IDS,
-    QUESTIONS,
     Game,
     GamePhase,
     Player,
@@ -84,12 +83,14 @@ class GameService:
         self._repository = repository or InMemoryGameRepository()
         self._round_runner = round_runner
 
-    def create_game(self) -> tuple[PublicGame, str]:
+    async def create_game(self) -> tuple[PublicGame, str]:
         player_token = secrets.token_urlsafe(32)
         roles: list[PlayerRole] = ["human", *random.sample(MBTI_TYPES, 3)]
         random.shuffle(roles)
+        questions = await asyncio.to_thread(self._gateway.generate_questions)
         game = Game(
             game_id=str(uuid4()),
+            round_questions=questions,
             players=[
                 Player(
                     id=player_id,
@@ -151,18 +152,21 @@ class GameService:
             self._repository.replace(completed_game)
             return completed_game.to_public(token)
 
-    def next_round(self, game_id: str, token: str | None) -> PublicGame:
+    async def next_round(self, game_id: str, token: str | None) -> PublicGame:
         game = self._authorized_game(game_id, token)
         if game.phase != GamePhase.VERDICT:
             raise InvalidPhaseError("Game is not ready for the next round")
 
+        questions = await asyncio.to_thread(self._gateway.generate_questions)
         next_game = game.model_copy(deep=True)
         next_game.round_number += 1
-        next_game.question = QUESTIONS[next_game.round_number - 1]
+        next_game.round_questions = questions
+        next_game.question_index = 0
         next_game.phase = GamePhase.AWAITING_ANSWER
         next_game.verdict = None
         for player in next_game.players:
             player.answer = None
+            player.answers = []
         self._repository.replace(next_game)
         return next_game.to_public(token)
 
