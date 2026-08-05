@@ -54,10 +54,10 @@ def game() -> Game:
         game_id="game-graph",
         round_questions=list(TEST_QUESTIONS),
         players=[
-            Player(id="player_01", role="human", token="human-token"),
-            Player(id="player_02", role="INTJ"),
-            Player(id="player_03", role="ENFP"),
-            Player(id="player_04", role="ISTP"),
+            Player(id="player_01", role="human", nickname="수상한 스컹크", token="human-token"),
+            Player(id="player_02", role="INTJ", nickname="어색한 수달"),
+            Player(id="player_03", role="ENFP", nickname="이상한 토끼"),
+            Player(id="player_04", role="ISTP", nickname="괴상한 여우"),
         ],
     )
 

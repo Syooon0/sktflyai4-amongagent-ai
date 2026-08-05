@@ -162,7 +162,8 @@ def test_api_hides_roles_before_finish_and_reveals_them_after_finish(
 ) -> None:
     monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
     monkeypatch.setattr(
-        "app.service.random.sample", lambda population, k: ["INTJ", "ENFP", "ISTP"]
+        "app.service.random.sample",
+        lambda population, k: ["INTJ", "ENFP", "ISTP"] if k == 3 else list(population)[:k],
     )
     client = configured_client(fake_gateway_factory(["player_01"]))
     game, token = create_game(client)

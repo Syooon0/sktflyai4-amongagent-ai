@@ -29,6 +29,7 @@ export interface Verdict {
 
 export interface PublicPlayer {
   id: PlayerId;
+  nickname: string;
   character_emoji: string;
   color: PlayerColor;
   is_you: boolean;
