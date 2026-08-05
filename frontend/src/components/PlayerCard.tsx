@@ -42,18 +42,19 @@ export default function PlayerCard({
       }${isEliminating ? " player-card--eliminating" : ""}`}
       data-player-id={player.id}
     >
-      {humanScore !== null && (
-        <span className="player-card__score" title="인간다움 점수">
-          의심도: {humanScore}
-        </span>
-      )}
-
       <header className="player-card__header">
         <span className="player-card__character" aria-hidden="true">
           {player.character_emoji}
         </span>
         <h3>{player.nickname}</h3>
-        {player.is_you && <span className="player-card__you">YOU</span>}
+        <span className="player-card__badges">
+          {humanScore !== null && (
+            <span className="player-card__score" title="인간다움 점수">
+              의심도: {humanScore}
+            </span>
+          )}
+          {player.is_you && <span className="player-card__you">YOU</span>}
+        </span>
       </header>
 
       <div className="player-card__bubble" aria-live="polite">
