@@ -1,4 +1,4 @@
-# Among Agents
+# sktflyai4-amongagent-ai — Among Agents
 
 Among Agents is a three-round Korean party game where one human tries to blend
 in with three AI players. Each player answers the same prompt, then an
