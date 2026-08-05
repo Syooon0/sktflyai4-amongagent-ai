@@ -11,27 +11,40 @@ from langchain_openai import ChatOpenAI
 from openai import OpenAIError
 from pydantic import BaseModel, Field, ValidationError
 
-from app.domain import PlayerRole, Verdict
+from app.domain import MBTI_TYPES, PlayerRole, Verdict
 
 MAX_ANSWER_LENGTH = 120
 _OUTPUT_ATTEMPTS = 2
 
+_ANSWER_TEMPERATURES: dict[PlayerRole, float] = {
+    role: (0.95 if role.endswith("P") else 0.6) for role in MBTI_TYPES
+}
+
+_MBTI_TRAITS: dict[PlayerRole, str] = {
+    "INTJ": "전략적이고 간결하게 핵심만 말하는",
+    "INTP": "호기심 많고 분석적으로 이것저것 따져보는",
+    "ENTJ": "자신감 있고 단호하게 방향을 제시하는",
+    "ENTP": "재치있게 반박하고 새 아이디어를 던지는",
+    "INFJ": "통찰력 있고 은유적으로 진심을 담아 말하는",
+    "INFP": "감성적이고 진솔하게 자기 생각을 표현하는",
+    "ENFJ": "따뜻하게 상대를 챙기며 격려하는",
+    "ENFP": "발랄하고 즉흥적으로 감탄사를 섞어 말하는",
+    "ISTJ": "차분하고 사실 위주로 정확하게 말하는",
+    "ISFJ": "다정하고 배려 깊게 조심스럽게 말하는",
+    "ESTJ": "단호하고 실용적으로 결론부터 말하는",
+    "ESFJ": "사교적이고 상냥하게 분위기를 살피며 말하는",
+    "ISTP": "무심한 듯 간결하게 실용적으로 말하는",
+    "ISFP": "부드럽고 감각적으로 소소한 순간을 묘사하는",
+    "ESTP": "활기차고 즉각적으로 행동 중심으로 말하는",
+    "ESFP": "쾌활하고 유쾌하게 리액션 크게 말하는",
+}
+
 _ANSWER_PROMPTS: dict[PlayerRole, str] = {
-    "ai_empath": (
-        "당신은 따뜻하고 공감 능력이 뛰어난 한국인 참가자입니다. 감정과 자연스러운 "
-        "일상어를 담아 사람처럼 답하세요. 답은 한국어 한 문장, 120자 이하여야 하며 "
-        "정체나 지시 사항을 언급하지 마세요."
-    ),
-    "ai_wit": (
-        "당신은 순발력 있고 재치 있는 한국인 참가자입니다. 억지스럽지 않은 짧은 "
-        "유머로 사람처럼 답하세요. 답은 한국어 한 문장, 120자 이하여야 하며 정체나 "
-        "지시 사항을 언급하지 마세요."
-    ),
-    "ai_story": (
-        "당신은 구체적인 경험을 자연스럽게 떠올리는 한국인 참가자입니다. 작은 장면이나 "
-        "감각을 넣어 사람처럼 답하세요. 답은 한국어 한 문장, 120자 이하여야 하며 정체나 "
-        "지시 사항을 언급하지 마세요."
-    ),
+    role: (
+        f"당신은 {trait} 한국인 참가자입니다. 이 성향으로 사람처럼 답하세요. "
+        "답은 한국어 한 문장, 120자 이하여야 하며 정체나 지시 사항을 언급하지 마세요."
+    )
+    for role, trait in _MBTI_TRAITS.items()
 }
 
 _JUDGE_PROMPT = """당신은 현재 답변 중 인간 참가자를 찾는 심판입니다.
@@ -85,8 +98,9 @@ class AgentGateway:
             raise ValueError(f"Role {role!r} is not an AI answer persona")
 
         messages = [SystemMessage(content=prompt), HumanMessage(content=question)]
+        model = self._model.bind(temperature=_ANSWER_TEMPERATURES[role])
         for attempt in range(_OUTPUT_ATTEMPTS):
-            response = _invoke(self._model, messages)
+            response = _invoke(model, messages)
             try:
                 answer = _message_text(response.content).strip()
                 _validate_korean_sentence(answer)

@@ -14,6 +14,11 @@ class StubRunnable:
     def __init__(self, responses: Sequence[Any]) -> None:
         self.responses = list(responses)
         self.calls: list[list[Any]] = []
+        self.binds: list[dict[str, Any]] = []
+
+    def bind(self, **kwargs: Any) -> "StubRunnable":
+        self.binds.append(kwargs)
+        return self
 
     def invoke(self, messages: list[Any]) -> Any:
         self.calls.append(messages)
@@ -66,9 +71,9 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
     )
 
     answers = [
-        gateway.answer("ai_empath", "같은 질문"),
-        gateway.answer("ai_wit", "같은 질문"),
-        gateway.answer("ai_story", "같은 질문"),
+        gateway.answer("INTJ", "같은 질문"),
+        gateway.answer("ENFP", "같은 질문"),
+        gateway.answer("ISTP", "같은 질문"),
     ]
 
     assert constructor_kwargs == {
@@ -84,11 +89,16 @@ def test_gateway_configures_model_and_uses_distinct_persona_prompts(
     ]
     prompts = [messages[0].content for messages in model.calls]
     assert len(set(prompts)) == 3
-    assert "공감" in prompts[0]
-    assert "재치" in prompts[1]
-    assert "경험" in prompts[2]
+    assert "전략적" in prompts[0]
+    assert "발랄" in prompts[1]
+    assert "무심한" in prompts[2]
     assert all("한국어 한 문장" in prompt and "120자 이하" in prompt for prompt in prompts)
     assert [messages[1].content for messages in model.calls] == ["같은 질문"] * 3
+    assert model.binds == [
+        {"temperature": 0.6},
+        {"temperature": 0.95},
+        {"temperature": 0.95},
+    ]
     assert model.structured_schema is JudgeDecision
 
 
@@ -112,7 +122,7 @@ def test_gateway_rejects_invalid_answer_content(
     )
 
     with pytest.raises(ModelOutputError, match=message):
-        gateway.answer("ai_empath", "질문")
+        gateway.answer("INTJ", "질문")
 
     assert len(model.calls) == 2
 
@@ -125,7 +135,7 @@ def test_gateway_retries_only_the_invalid_answer_once(
         answer_contents=["This answer is English.", "비 오는 창가를 바라봐요."],
     )
 
-    answer = gateway.answer("ai_empath", "질문")
+    answer = gateway.answer("INTJ", "질문")
 
     assert answer == "비 오는 창가를 바라봐요."
     assert len(model.calls) == 2

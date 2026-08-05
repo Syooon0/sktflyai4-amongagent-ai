@@ -5,9 +5,22 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-PlayerRole = Literal["human", "ai_empath", "ai_wit", "ai_story"]
+PlayerRole = Literal[
+    "human",
+    "ENFJ", "ENFP", "ENTJ", "ENTP",
+    "ESFJ", "ESFP", "ESTJ", "ESTP",
+    "INFJ", "INFP", "INTJ", "INTP",
+    "ISFJ", "ISFP", "ISTJ", "ISTP",
+]
 PlayerId = Literal["player_01", "player_02", "player_03", "player_04"]
 PlayerColor = Literal["coral", "blue", "yellow", "mint"]
+
+MBTI_TYPES: tuple[PlayerRole, ...] = (
+    "ENFJ", "ENFP", "ENTJ", "ENTP",
+    "ESFJ", "ESFP", "ESTJ", "ESTP",
+    "INFJ", "INFP", "INTJ", "INTP",
+    "ISFJ", "ISFP", "ISTJ", "ISTP",
+)
 
 PLAYER_IDS: tuple[PlayerId, ...] = (
     "player_01",

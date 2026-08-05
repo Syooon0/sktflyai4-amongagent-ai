@@ -2,9 +2,22 @@ import type { PlayerId, PlayerRole, PublicPlayer } from "../types";
 
 const ROLE_LABELS: Record<PlayerRole, string> = {
   human: "HUMAN",
-  ai_empath: "AI · 공감형",
-  ai_wit: "AI · 재치형",
-  ai_story: "AI · 경험형",
+  INTJ: "AI · INTJ 전략가",
+  INTP: "AI · INTP 사색가",
+  ENTJ: "AI · ENTJ 통솔자",
+  ENTP: "AI · ENTP 변론가",
+  INFJ: "AI · INFJ 옹호자",
+  INFP: "AI · INFP 중재자",
+  ENFJ: "AI · ENFJ 사회운동가",
+  ENFP: "AI · ENFP 활동가",
+  ISTJ: "AI · ISTJ 논리주의자",
+  ISFJ: "AI · ISFJ 수호자",
+  ESTJ: "AI · ESTJ 관리자",
+  ESFJ: "AI · ESFJ 외교관",
+  ISTP: "AI · ISTP 재주꾼",
+  ISFP: "AI · ISFP 예술가",
+  ESTP: "AI · ESTP 사업가",
+  ESFP: "AI · ESFP 연예인",
 };
 
 interface PlayerCardProps {

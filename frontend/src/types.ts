@@ -1,6 +1,11 @@
 export type PlayerId = "player_01" | "player_02" | "player_03" | "player_04";
 
-export type PlayerRole = "human" | "ai_empath" | "ai_wit" | "ai_story";
+export type PlayerRole =
+  | "human"
+  | "ENFJ" | "ENFP" | "ENTJ" | "ENTP"
+  | "ESFJ" | "ESFP" | "ESTJ" | "ESTP"
+  | "INFJ" | "INFP" | "INTJ" | "INTP"
+  | "ISFJ" | "ISFP" | "ISTJ" | "ISTP";
 
 export type PlayerColor = "coral" | "blue" | "yellow" | "mint";
 
